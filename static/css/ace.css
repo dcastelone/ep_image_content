@@ -1,0 +1,80 @@
+.image {
+  display: inline-block;
+  position: relative;
+  /* border: 1px dotted #ccc; /* Remove static border */
+  /* cursor: ew-resize; /* Remove static cursor */
+  line-height: 0;
+}
+
+/* Remove hover rule */
+/*
+.image:hover {
+  border: 1px solid blue; 
+  cursor: ew-resize;
+}
+*/
+
+.image>img {
+  height: auto !important;
+  -moz-user-select: -moz-none;
+  -khtml-user-select: none;
+  -webkit-user-select: none;
+  user-select: none;
+  display: block;
+}
+
+/* Remove ::before/::after styles */
+/*
+.image::before,
+.image::after {
+  ...
+}
+*/
+/*
+.image::before {
+  ...
+}
+*/
+/*
+.image::after {
+  ...
+}
+*/
+
+/* Styles for the new handle spans */
+.image span.image-resize-handle {
+  content: '';
+  position: absolute;
+  width: 7px; 
+  height: 7px;
+  background-color: #1a73e8; /* Google Docs blue square */
+  border: 1px solid #fff; /* White border for visibility */
+  z-index: 1;
+}
+
+.image span.image-resize-handle.tl { top: -2px; left: -2px; }
+.image span.image-resize-handle.tr { top: -2px; right: -2px; }
+.image span.image-resize-handle.bl { bottom: -2px; left: -2px; }
+.image span.image-resize-handle.br { bottom: -2px; right: -2px; cursor: ew-resize; }
+
+
+/* Hide the handles if the image is very small */
+.image[style*="width: 10%;"] span.image-resize-handle,
+.image[style*="width: 11%;"] span.image-resize-handle,
+.image[style*="width: 12%;"] span.image-resize-handle,
+.image[style*="width: 13%;"] span.image-resize-handle,
+.image[style*="width: 14%;"] span.image-resize-handle,
+.image[style*="width: 15%;"] span.image-resize-handle {
+    display: none;
+}
+
+/* Remove original control container styles if no longer needed */
+/*
+.control-container>.buttonicon {
+  height: 24px;
+  width: 24px;
+}
+.control-container .active {
+  border: 1px solid #666;
+}
+*/
