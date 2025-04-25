@@ -1,35 +1,18 @@
 'use strict';
+
+// Removed _handleNewLines as we insert inline now
+/*
 const _handleNewLines = (ace) => {
   const rep = ace.ace_getRep();
   const lineNumber = rep.selStart[0];
   const curLine = rep.lines.atIndex(lineNumber);
   if (curLine.text) {
-    // Handle image insertion in a table
-    // let nPL = [];
-    // let i = 0;
-    // var tblJSONObj = JSON.parse(curLine.text);
-    // let PL = tblJSONObj.payload[0];
-    // while (i < PL.length) {
-    //   nPL[i] = PL[i].trim().length + 4;
-    //   i++;
-    // }
-    // i = 0;
-    // let _rep_pos = 15;
-
-    // while (_rep_pos < rep.selStart[1]) {
-    //   _rep_pos = _rep_pos + nPL[i];
-    //   i++;
-    // }
-    // tblJSONObj.payload[0][i] = `Image`
-    // rep.lines.atIndex(lineNumber).text = JSON.stringify(tblJSONObj);
-    // End of insertion image in table
-
     ace.ace_doReturnKey();
     return lineNumber + 1;
   }
-
   return lineNumber;
 };
+*/
 
 const _isValid = (file) => {
   const mimedb = clientVars.ep_image_insert.mimeTypes;
@@ -66,6 +49,39 @@ const _isValid = (file) => {
   return true;
 };
 
+// Helper function to insert the image attribute with ZWSP boundaries
+const insertInlineImage = (ace, imageData) => {
+  const ZWSP = '\u200b';       // Zero-Width Space
+  const placeholder = '\u00a0'; // Use NBSP as placeholder
+  const textToInsert = ZWSP + placeholder + ZWSP;
+
+  const escapedSrc = escape(imageData.src);
+  const attrKey = 'image'; // Standard attribute key
+  const attrValue = escapedSrc; // Escaped src is the value
+
+  // Get current selection to replace it (or insert if no selection)
+  const rep = ace.ace_getRep();
+  const start = rep.selStart;
+  const end = rep.selEnd;
+
+  console.log(`[ep_image_insert] Inserting ZWSP + Image Placeholder + ZWSP ('${textToInsert}') with attribute ${attrKey}=${attrValue}`);
+
+  // Add the placeholder characters, replacing selection if any
+  ace.ace_replaceRange(start, end, textToInsert);
+
+  // Define the range for the attribute: ONLY the middle character (the placeholder NBSP)
+  const attrStart = [start[0], start[1] + ZWSP.length]; // Start after the first ZWSP
+  const attrEnd = [start[0], start[1] + ZWSP.length + placeholder.length]; // End after the placeholder NBSP
+
+  // Apply the image attribute to the placeholder character
+  ace.ace_performDocumentApplyAttributesToRange(attrStart, attrEnd, [[attrKey, attrValue]]);
+
+  // Move cursor after all inserted characters
+  const finalEnd = [start[0], start[1] + textToInsert.length];
+  ace.ace_performSelectionChange(finalEnd, finalEnd, false);
+  ace.ace_focus();
+};
+
 
 exports.postToolbarInit = (hook, context) => {
   const toolbar = context.toolbar;
@@ -92,13 +108,31 @@ exports.postToolbarInit = (hook, context) => {
         reader.readAsDataURL(file);
         reader.onload = () => {
           const data = reader.result;
-          context.ace.callWithAce((ace) => {
-            const imageLineNr = _handleNewLines(ace);
-            ace.ace_addImage(imageLineNr, data);
-            ace.ace_doReturnKey();
-          }, 'img', true);
+          // ---- Get Image Dimensions ----
+          const img = new Image();
+          img.onload = () => {
+            const widthPx = `${img.naturalWidth}px`;
+            const heightPx = `${img.naturalHeight}px`;
+            console.log(`[ep_image_insert toolbar] Base64 Image loaded: ${widthPx} x ${heightPx}`);
+            context.ace.callWithAce((ace) => {
+              // const imageLineNr = _handleNewLines(ace); // REMOVED: _handleNewLines is not defined/needed
+              // Pass dimensions to doInsertImage (inserts at cursor)
+              ace.ace_doInsertImage(data, widthPx, heightPx); // REMOVED line number
+              // ace.ace_doReturnKey(); // REMOVED: Don't force newline
+            }, 'imgBase64', true);
+          };
+          img.onerror = () => {
+             console.error('[ep_image_insert toolbar] Failed to load Base64 image data to get dimensions. Inserting without dimensions.');
+             context.ace.callWithAce((ace) => {
+               // const imageLineNr = _handleNewLines(ace); // REMOVED
+               ace.ace_doInsertImage(data); // REMOVED line number
+               // ace.ace_doReturnKey(); // REMOVED
+            }, 'imgBase64Error', true);
+          };
+          img.src = data; // Trigger load
+          // ---- End Get Image Dimensions ----
         };
-      } else {
+      } else { // Upload storage type
         const formData = new FormData();
 
         // add assoc key values, this will be posts values
@@ -112,13 +146,31 @@ exports.postToolbarInit = (hook, context) => {
 
             return myXhr;
           },
-          success: (data) => {
+          success: (data) => { // data here is the URL of the uploaded image
             $('#imageUploadModalLoader').removeClass('popup-show');
-            context.ace.callWithAce((ace) => {
-              const imageLineNr = _handleNewLines(ace);
-              ace.ace_addImage(imageLineNr, data);
-              ace.ace_doReturnKey();
-            }, 'img', true);
+            // ---- Get Image Dimensions ----
+            const img = new Image();
+            img.onload = () => {
+              const widthPx = `${img.naturalWidth}px`;
+              const heightPx = `${img.naturalHeight}px`;
+              console.log(`[ep_image_insert toolbar] Uploaded Image loaded: ${widthPx} x ${heightPx}`);
+              context.ace.callWithAce((ace) => {
+                // const imageLineNr = _handleNewLines(ace); // REMOVED
+                // Pass dimensions to doInsertImage (inserts at cursor)
+                ace.ace_doInsertImage(data, widthPx, heightPx); // REMOVED line number
+                // ace.ace_doReturnKey(); // REMOVED
+              }, 'imgUpload', true);
+            };
+            img.onerror = () => {
+               console.error(`[ep_image_insert toolbar] Failed to load uploaded image URL (${data}) to get dimensions. Inserting without dimensions.`);
+               context.ace.callWithAce((ace) => {
+                 // const imageLineNr = _handleNewLines(ace); // REMOVED
+                 ace.ace_doInsertImage(data); // REMOVED line number
+                 // ace.ace_doReturnKey(); // REMOVED
+              }, 'imgUploadError', true);
+            };
+            img.src = data; // Trigger load using the URL
+            // ---- End Get Image Dimensions ----
           },
           error: (error) => {
             let errorResponse;

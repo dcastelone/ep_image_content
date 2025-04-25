@@ -1,5 +1,7 @@
 'use strict';
 
+// Removed the old 'image' helper object that worked with line attributes
+/*
 const image = {
   setImageSize(width, lineNumber) {
     const documentAttributeManager = this.documentAttributeManager;
@@ -32,574 +34,813 @@ const image = {
     }
   }
 };
+*/
 
-exports.aceAttribsToClasses = (name, context) => {
-  // Log for ALL keys to see the sequence
-  console.log(`[ep_image_insert aceAttribsToClasses] Processing key: ${context.key}, value: ${context.value}`);
-
-  if (context.key === 'img') {
-    const imgUrl = context.value;
-    // Stricter validation: Check if it looks like a valid URL or data URI
-    if (imgUrl && (imgUrl.startsWith('data:') || imgUrl.startsWith('http') || imgUrl.startsWith('/'))) {
-      const cls = `img:${imgUrl}`;
-      console.log(`[ep_image_insert aceAttribsToClasses] Returning class for key 'img': ${cls}`);
-      return [cls];
-    } else {
-      console.warn(`[ep_image_insert aceAttribsToClasses] Received invalid value for 'img' attribute: "${imgUrl}". Ignoring.`);
-      return []; // Return empty class array if value is invalid
-    }
+exports.aceAttribsToClasses = function(name, context) {
+  // console.log('[ep_image_insert aceAttribsToClasses]', context); // DEBUG
+  if (context.key === 'image' && context.value) {
+    console.log(`[ep_image_insert aceAttribsToClasses] Found image attribute, length: ${context.value.length}`); // Don't log full base64
+    return ['image:' + context.value];
   }
-  if (context.key === 'imgWidth') {
-    const cls = `imgWidth:${context.value}`;
-    console.log(`[ep_image_insert aceAttribsToClasses] Returning class for key 'imgWidth': ${cls}`);
-    return [cls];
+  // New: Add image-width and image-height attributes
+  if (context.key === 'image-width' && context.value) {
+    console.log(`[ep_image_insert aceAttribsToClasses] Found image-width: ${context.value}`);
+    return ['image-width:' + context.value];
   }
-  if (context.key === 'imgAlign') {
-    const cls = `imgAlign:${context.value}`;
-    console.log(`[ep_image_insert aceAttribsToClasses] Returning class for key 'imgAlign': ${cls}`);
-    return [cls];
+  if (context.key === 'image-height' && context.value) {
+    console.log(`[ep_image_insert aceAttribsToClasses] Found image-height: ${context.value}`);
+    return ['image-height:' + context.value];
   }
+  return [];
 };
 
-// Rewrite the DOM contents when an IMG attribute is discovered
-exports.aceDomLineProcessLineAttributes = (name, context) => {
-  const currentLineNumber = context.lineNumber; // Get line number
-  console.log(`[ep_image_insert aceDomLineProcessLineAttributes L#${currentLineNumber}] Input context.cls: ${context.cls}`);
-  
-  // --- Robust source extraction from class list ---
-  let imgSrcFromClass = null;
-  const classes = context.cls.split(' ');
-  for (const cls of classes) {
-      if (cls.startsWith('img:')) {
-          imgSrcFromClass = cls.substring(4); // Get the part after "img:"
-          break; // Found it
-      }
-  }
-  console.log(`[ep_image_insert aceDomLineProcessLineAttributes L#${currentLineNumber}] Extracted img src from class: ${imgSrcFromClass}`);
-
-  // Basic validation: Check if it looks like a data URI or a common URL start, and NOT "<img"
-  let isValidSrc = imgSrcFromClass && imgSrcFromClass !== '<img' && (imgSrcFromClass.startsWith('data:') || imgSrcFromClass.startsWith('http') || imgSrcFromClass.startsWith('/'));
-
-  if (!isValidSrc) {
-      // Source from class is invalid. Log it and return nothing to prevent modification.
-      console.warn(`[ep_image_insert aceDomLineProcessLineAttributes L#${currentLineNumber}] Invalid or missing image source in class list: ${imgSrcFromClass}. Preserving existing DOM.`);
-      return []; 
-  }
-  
-  const expWidth = /(?:^| )imgWidth:((\S+))/;
-  const imgWidth = expWidth.exec(context.cls);
-  const expAlign = /(?:^| )imgAlign:((\S+))/;
-  const imgAlign = expAlign.exec(context.cls);
-
-  if (!imgSrcFromClass) return [];
-  
-  let width = '50';
-  let height = '50';
-  let imgPos = 'none';
-
-  if (imgWidth) {
-    width = imgWidth[1];
-  }
-
-  if (imgAlign) {
-    imgPos = imgAlign[1];
-  }
-
-  // Generate a more stable ID based on the validated image source
-  let stableId = 'img_' + imgSrcFromClass.split('').reduce((a,b)=>{a=((a<<5)-a)+b.charCodeAt(0);return a&a},0); 
-  // Ensure ID is valid for HTML4 (starts with letter, contains letters, digits, hyphens, underscores)
-  stableId = stableId.toString().replace(/^-/, 'id-').replace(/[^A-Za-z0-9_-]/g, '_');
-  
-  // Ensure data-img-src attribute is added
-  let template = `<span id="${stableId}" class="image" data-img-src="${imgSrcFromClass}" style="width:${width}%;float:${imgPos}">`;
-  
-  // Use the validated imgSrcFromClass
-  console.log(`[ep_image_insert aceDomLineProcessLineAttributes L#${currentLineNumber}] Using validated img src: ${imgSrcFromClass}`); 
-  // Add handle spans inside the main span
-  const handleHtml = 
-    '<span class="image-resize-handle tl"></span>' +
-    '<span class="image-resize-handle tr"></span>' +
-    '<span class="image-resize-handle bl"></span>' +
-    '<span class="image-resize-handle br"></span>';
-  const preHtml = `${template} ${handleHtml} <img src="${imgSrcFromClass}" style="height:${height}%;width:100%;">`;
-    const modifier = {
-      preHtml,
-    postHtml: '</span>',
-      processedMarker: true,
-    };
-    return [modifier];
-};
+// Remove the old DOM processing hook that replaced the line content
+// exports.aceDomLineProcessLineAttributes = ... (Removed)
 
 exports.aceInitialized = (hook, context) => {
+  // Bind the new image insertion function
+  context.editorInfo.ace_doInsertImage = doInsertImage.bind(context);
+  
+  // Remove the old helper functions that relied on line attributes
+  /*
   const editorInfo = context.editorInfo;
   editorInfo.ace_addImage = image.addImage.bind(context);
   editorInfo.ace_setImageSize = image.setImageSize.bind(context);
   editorInfo.ace_setImageAlign = image.setImageAlign.bind(context);
   editorInfo.ace_removeImage = image.removeImage.bind(context);
-
-  // Add the missing getter function
-  editorInfo.ace_getAttributeOnLine = function(lineNumber, key) {
-    // Ensure documentAttributeManager exists on the context
-    if (this.documentAttributeManager) {
-      return this.documentAttributeManager.getAttributeOnLine(lineNumber, key);
-    }
-    console.error('[ep_image_insert] documentAttributeManager not found on context in ace_getAttributeOnLine');
-    return undefined; 
-  }.bind(context);
+  editorInfo.ace_getAttributeOnLine = ...
+  */
 };
 
-// Handle click events
+// Function to render placeholders into actual images
+const renderImagePlaceholders = (rootElement) => {
+  console.log('[ep_image_insert] Searching for placeholders within:', rootElement);
+  const placeholders = $(rootElement).find('span.image-placeholder');
+  console.log(`[ep_image_insert] Found ${placeholders.length} placeholders.`);
+
+  placeholders.each(function() {
+    const $placeholder = $(this);
+    // Check if already processed to prevent infinite loops with MutationObserver
+    if ($placeholder.data('processed-image')) {
+        return;
+    }
+
+    console.log('[ep_image_insert] Processing placeholder:', this);
+    const attribsData = $placeholder.data('image-attribs');
+    if (typeof attribsData === 'string') {
+      try {
+        const imageData = JSON.parse(attribsData);
+        console.log('[ep_image_insert] Parsed image data:', imageData);
+
+        if (imageData && imageData.src) {
+          const $img = $('<img>').attr('src', imageData.src);
+          $img.css({
+            'display': 'inline-block', // Make it inline
+            'max-width': '100%',       // Prevent overflow
+            'max-height': '20em',      // Reasonable max height
+            'vertical-align': 'middle' // Align nicely with text
+          });
+
+          if (imageData.width) $img.attr('width', imageData.width);
+          if (imageData.height) $img.attr('height', imageData.height);
+        
+          // Replace the placeholder content (ZWS) with the image
+          $placeholder.empty().append($img);
+          // Mark as processed
+          $placeholder.data('processed-image', true);
+          // Remove the data attribute after processing? Maybe keep for debugging.
+          console.log('[ep_image_insert] Replaced placeholder with image:', $img[0]);
+        } else {
+          console.warn('[ep_image_insert] Invalid image data found in placeholder:', attribsData);
+          $placeholder.text('[Invalid Image]'); // Show error inline
+          $placeholder.data('processed-image', true); // Mark as processed to avoid retrying
+        }
+      } catch (e) {
+        console.error('[ep_image_insert] Failed to parse image data:', attribsData, e);
+        $placeholder.text('[Parse Error]'); // Show error inline
+        $placeholder.data('processed-image', true); // Mark as processed to avoid retrying
+      }
+    } else {
+      console.warn('[ep_image_insert] Missing or invalid data-image-attribs:', attribsData);
+      $placeholder.text('[Missing Data]'); // Show error inline
+      $placeholder.data('processed-image', true); // Mark as processed to avoid retrying
+    }
+  });
+};
+
+// Use MutationObserver to render images when placeholders appear in the DOM
 exports.postAceInit = function (hook, context) {
-  console.log('ep_image_insert: postAceInit hook running.');
+  console.log('[ep_image_insert] postAceInit: Hook running.');
 
   const padOuter = $('iframe[name="ace_outer"]').contents().find('body');
-  console.log('[ep_image_insert] padOuter element reference:', padOuter[0]); // Log the element
-  
-  // --- Create Resize Outline Box ---
-  const $outlineBox = $('<div id="imageResizeOutline"></div>');
-  $outlineBox.css({
-      position: 'absolute',
-      // border: '2px solid #1a73e8', // Remove border
-      backgroundColor: 'rgba(26, 115, 232, 0.3)', // Use semi-transparent background
-      'pointer-events': 'none', 
-      display: 'none',
-      'z-index': 1000, // Ensure it's on top
-      'box-sizing': 'border-box' // Include border in width/height
-  });
-  padOuter.append($outlineBox);
-  // --------------------------------
+  if (padOuter.length === 0) {
+      console.error('[ep_image_insert postAceInit] Could not find outer pad body.');
+      return;
+  }
+
+  // --- Create Resize Outline Box (if it doesn't exist) ---
+  if ($('#imageResizeOutline').length === 0) {
+      const $outlineBox = $('<div id="imageResizeOutline"></div>');
+      $outlineBox.css({
+          position: 'absolute',
+          border: '1px dashed #1a73e8', // Example style, adjust in CSS
+          backgroundColor: 'rgba(26, 115, 232, 0.1)',
+          'pointer-events': 'none',
+          display: 'none',
+          'z-index': 1000,
+          'box-sizing': 'border-box'
+      });
+      // Append to OUTER body (like old plugin)
+      padOuter.append($outlineBox);
+      console.log('[ep_image_insert postAceInit] Added resize outline box to OUTER body.');
+  } else {
+      console.log('[ep_image_insert postAceInit] Resize outline box already exists.');
+  }
+
+  // Initialize outline box reference OUTSIDE callWithAce
+  const $outlineBoxRef = padOuter.find('#imageResizeOutline');
+  // Store ace context for nested calls
+  const _aceContext = context.ace;
+
+  // Check if element exists NOW
+  if (!$outlineBoxRef || $outlineBoxRef.length === 0) {
+     console.error('[ep_image_insert postAceInit] FATAL: Could not find #imageResizeOutline OUTSIDE callWithAce.');
+     // Cannot proceed without the outline box
+     return; 
+  } else {
+     console.log('[ep_image_insert postAceInit] Successfully found #imageResizeOutline OUTSIDE callWithAce.', $outlineBoxRef[0]);
+  }
 
   context.ace.callWithAce((ace) => {
-    console.log('ep_image_insert: Inside callWithAce callback.');
+    console.log('[ep_image_insert postAceInit] Inside callWithAce.');
 
-    // Try finding the inner iframe document directly using selectors
-    const $outerIframe = $('iframe[name="ace_outer"]');
-    console.log(`[ep_image_insert] Found outer iframe? Length: ${$outerIframe.length}`);
-    if ($outerIframe.length === 0) {
-        console.error('ep_image_insert: ERROR - Could not find outer iframe (ace_outer).');
-        return;
-    }
-    // Note: Etherpad uses ace_inner iframe inside ace_outer
-    const $innerIframe = $outerIframe.contents().find('iframe[name="ace_inner"]');
-    console.log(`[ep_image_insert] Found inner iframe? Length: ${$innerIframe.length}`);
+    // Get inner iframe body (similar to old plugin)
+    const $innerIframe = $('iframe[name="ace_outer"]').contents().find('iframe[name="ace_inner"]');
     if ($innerIframe.length === 0) {
-        console.error('ep_image_insert: ERROR - Could not find inner iframe (ace_inner) inside ace_outer.');
-        // Log outer iframe contents for debugging
-        console.log('ep_image_insert: ace_outer contents:', $outerIframe.contents().find('body').html());
+        console.error('ep_image_insert: ERROR - Could not find inner iframe (ace_inner).');
         return;
     }
+    const innerDocBody = $innerIframe.contents().find('body')[0];
+    const $inner = $(innerDocBody);
+    const innerDoc = $innerIframe.contents(); // Inner document for mousemove/up
 
-    console.log('[ep_image_insert] Attaching drag listeners directly...'); // New log
-    const innerDocBody = $innerIframe.contents().find('body')[0]; // Get the raw body element
-    const $inner = $(innerDocBody); // Wrap with jQuery
-    const innerDoc = $innerIframe.contents(); // Get inner document for mousemove/up
-
-    if (!$inner || $inner.length === 0) { // Check if $inner is valid
+    if (!$inner || $inner.length === 0) {
         console.error('ep_image_insert: ERROR - Could not get body from inner iframe.');
-        return; // Exit if body not found
+        return;
     }
-    console.log('[ep_image_insert] Found inner iframe body directly:', $inner[0]);
 
     // Drag state variables
-    let isDragging = false; // For RESIZE
-    let isMoving = false; // For MOVE
-    let startWidth = 0;
+    let isDragging = false;
     let startX = 0;
-    let targetImageElement = null;
-    let targetLineNumber = -1; // For RESIZE target line
-    let startMoveLineNumber = -1; // For MOVE start line
-    let parentContainerWidth = 0;
-    let capturedImgSrc = null; // Variable to store captured image source
-    let startHeight = 0;       // Variable for initial height
-    let aspectRatio = 1;       // Variable for aspect ratio
+    let startWidth = 0;
+    let startHeight = 0;
+    let aspectRatio = 1;
+    let targetOuterSpan = null; // Our main placeholder span
+    let targetInnerSpan = null; // The span we style with the background
+    let targetLineNumber = -1; // Store line number of dragged image
+    let outlineBoxPositioned = false; // NEW: Flag to track if outline is positioned
+    let mousedownClientX = 0; // NEW: Record viewport X on mousedown
+    let mousedownClientY = 0; // NEW: Record viewport Y on mousedown
+    let clickedHandle = null; // NEW: Store which handle was clicked ('tl', 'tr', 'bl', 'br')
+    // let parentContainerWidth = 0; // Might need recalculation
+    // let targetAttrRange = null; // To store the range for attribute update
 
-    // --- Add Mousedown Listener --- 
-    $inner.on('mousedown', '.image', function(evt) {
-      // Only handle left clicks
-      if (evt.button !== 0) return;
+    // --- Mousedown Listener ---
+    $inner.on('mousedown', '.inline-image.image-placeholder', function(evt) {
+        if (evt.button !== 0) return; // Only left clicks
+        targetOuterSpan = this;
+        const $targetOuterSpan = $(targetOuterSpan);
 
-      // Determine if it's a resize handle or the image body
-      const isResizeHandle = $(evt.target).hasClass('image-resize-handle');
-      targetImageElement = this; // The <span class="image"> element
-      // Always capture image source on mousedown
-      capturedImgSrc = targetImageElement.dataset.imgSrc;
-      console.log(`[ep_image_insert] mousedown captured src: ${capturedImgSrc}`);
+        // Clear selection from other images
+        $inner.find('.inline-image.image-placeholder.selected').removeClass('selected');
 
-      if (isResizeHandle) {
-        console.log('[ep_image_insert] mousedown on resize handle');
-        isDragging = true; // Flag for RESIZE drag
-        isMoving = false; // Ensure not moving
-        // RESIZE specific setup:
-        startX = evt.clientX;
-        startWidth = targetImageElement.offsetWidth; // Start width in pixels
-        startHeight = targetImageElement.offsetHeight; // Capture start height
-        aspectRatio = (startWidth > 0) ? (startHeight / startWidth) : 1;
-        parentContainerWidth = targetImageElement.parentNode.offsetWidth; // Width of the line container
-        targetLineNumber = getAllPrevious(targetImageElement.parentNode).length;
-        
-        // --- Positioning Logic for Outline Box (Keep the last working version) ---
-        // --- Positioning Logic: Relative Chain (Img->Inner->Outer) using Rects + Scroll - Adding Padding ---
-        const imgTag = targetImageElement.querySelector('img');
-        if (!imgTag) return;
+        // Add selected class to current image
+        $targetOuterSpan.addClass('selected');
 
-        // 1. Rects & Scrolls
-        const imgRect = imgTag.getBoundingClientRect();              // Img relative to viewport
-        const innerBodyRect = innerDocBody.getBoundingClientRect();    // Inner Body relative to viewport
-        const innerIframeRect = $innerIframe[0].getBoundingClientRect(); // Inner Iframe element relative to viewport
-        const outerBodyRect = padOuter[0].getBoundingClientRect();     // Outer Body relative to viewport
-        
-        const scrollTopInner = innerDocBody.scrollTop;
-        const scrollLeftInner = innerDocBody.scrollLeft;
-        const scrollTopOuter = padOuter.scrollTop();
-        const scrollLeftOuter = padOuter.scrollLeft();
+        // Find the inner span
+        targetInnerSpan = targetOuterSpan.querySelector('span.image-inner');
+        if (!targetInnerSpan) {
+            console.error('[ep_image_insert mousedown] Could not find inner span.');
+            targetOuterSpan = null; // Reset if invalid
+            return;
+        }
 
-        // 2. Image relative to SCROLLED Inner Body
-        const imgTopRelInner = imgRect.top - innerBodyRect.top + scrollTopInner;
-        const imgLeftRelInner = imgRect.left - innerBodyRect.left + scrollLeftInner;
+        const target = $(evt.target);
+        const isResizeHandle = target.hasClass('image-resize-handle');
 
-        // 3. Inner Iframe relative to SCROLLED Outer Body
-        const innerFrameTopRelOuter = innerIframeRect.top - outerBodyRect.top + scrollTopOuter;
-        const innerFrameLeftRelOuter = innerIframeRect.left - outerBodyRect.left + scrollLeftOuter;
+        if (isResizeHandle) {
+            console.log('[ep_image_insert] mousedown on resize handle');
+            isDragging = true;
+            outlineBoxPositioned = false; // Reset flag on new drag start
+            startX = evt.clientX; // Keep relative mouse tracking start point
+            mousedownClientX = evt.clientX; // Record viewport X
+            mousedownClientY = evt.clientY; // Record viewport Y
+            startWidth = targetInnerSpan.offsetWidth || parseInt(targetInnerSpan.style.width, 10) || 0;
+            startHeight = targetInnerSpan.offsetHeight || parseInt(targetInnerSpan.style.height, 10) || 0;
+            aspectRatio = (startWidth > 0 && startHeight > 0) ? (startHeight / startWidth) : 1;
 
-        // 4. Base Position (Relative to Outer Body) = InnerFrame's pos + Image's pos within InnerFrame
-        const calculatedFinalTop = innerFrameTopRelOuter + imgTopRelInner;
-        const calculatedFinalLeft = innerFrameLeftRelOuter + imgLeftRelInner;
-        const calculatedFinalWidth = imgRect.width;  // Use img dimensions from Rect
-        const calculatedFinalHeight = imgRect.height; // Use img dimensions from Rect
+            // Determine which handle was clicked
+            if (target.hasClass('tl')) clickedHandle = 'tl';
+            else if (target.hasClass('tr')) clickedHandle = 'tr';
+            else if (target.hasClass('bl')) clickedHandle = 'bl';
+            else if (target.hasClass('br')) clickedHandle = 'br';
+            else clickedHandle = null; // Should not happen if isResizeHandle is true
+            
+            console.log(`[ep_image_insert mousedown] Initial W/H read: ${startWidth}/${startHeight}. Click Viewport: X=${mousedownClientX}, Y=${mousedownClientY}. Handle: ${clickedHandle}`);
 
-        // 5. Adjust for Outer Padding (Adding)
-        const outerPadding = window.getComputedStyle(padOuter[0]);
-        const outerPaddingTop = parseFloat(outerPadding.paddingTop) || 0;
-        const outerPaddingLeft = parseFloat(outerPadding.paddingLeft) || 0;
+            // Store line number and attempt to calculate column index immediately
+            const lineNode = targetOuterSpan ? targetOuterSpan.parentNode : null;
+            if (lineNode) {
+                let imageIndex = 0;
+                let currentSibling = targetOuterSpan.previousElementSibling;
+                while (currentSibling) {
+                    if (currentSibling.classList.contains('image-placeholder')) {
+                        imageIndex++;
+                    }
+                    currentSibling = currentSibling.previousElementSibling;
+                }
+                console.log(`[ep_image_insert mousedown] Calculated imageIndex: ${imageIndex}`);
+                targetLineNumber = _getLineNumberOfElement(lineNode);
+                console.log(`[ep_image_insert mousedown] Stored target line number: ${targetLineNumber}`);
+                $(targetOuterSpan).attr('data-line', targetLineNumber);
+                _aceContext.callWithAce((ace) => {
+                    const rep = ace.ace_getRep();
+                    const lineText = rep.lines.atIndex(targetLineNumber).text;
+                    const placeholderSequence = '\u200B\u200B\u200B';
+                    let colStart = -1;
+                    let currentOccurence = 0;
+                    let searchFromIndex = 0;
+                    while (currentOccurence <= imageIndex) {
+                        const foundIndex = lineText.indexOf(placeholderSequence, searchFromIndex);
+                        if (foundIndex === -1) {
+                            colStart = -1;
+                            console.error(`[ep_image_insert mousedown] Failed to find ${imageIndex}-th sequence (found ${currentOccurence}) in line: "${lineText}"`);
+                            break;
+                        }
+                        if (currentOccurence === imageIndex) {
+                            colStart = foundIndex;
+                            break;
+                        }
+                        currentOccurence++;
+                        searchFromIndex = foundIndex + 1;
+                    }
+                    if (colStart >= 0) {
+                        console.log(`[ep_image_insert mousedown] Found ${imageIndex}-th sequence at column: ${colStart}`);
+                        $(targetOuterSpan).attr('data-col', colStart);
+                    } else {
+                        console.error(`[ep_image_insert mousedown] Could not find ${imageIndex}-th placeholder sequence in line text: "${lineText}"`);
+                        $(targetOuterSpan).removeAttr('data-col');
+                    }
+                }, 'getImageColStart', true);
+            } else {
+                console.error('[ep_image_insert mousedown] Could not find line node to store line number.');
+                targetLineNumber = -1;
+            }
 
-        const adjustedFinalTop = calculatedFinalTop + outerPaddingTop; // Add padding
-        const adjustedFinalLeft = calculatedFinalLeft + outerPaddingLeft; // Add padding
-
-        // 6. Manual Adjustment (Fine-tuning)
-        const MANUAL_OFFSET_TOP = 5; // Pixels down (+), up (-)
-        const MANUAL_OFFSET_LEFT = 40; // Pixels right (+), left (-)
-
-        const finalTopWithManualOffset = adjustedFinalTop + MANUAL_OFFSET_TOP;
-        const finalLeftWithManualOffset = adjustedFinalLeft + MANUAL_OFFSET_LEFT;
-
-        // Log the calculated values IMMEDIATELY before applying them
-        console.log(`[ep_image_insert] Positioning outline box (Relative Chain - Adjusted +Padding +Manual) at: L=${finalLeftWithManualOffset}, T=${finalTopWithManualOffset}, W=${calculatedFinalWidth}, H=${calculatedFinalHeight}`);
-        console.log(`  Debug Manual: Adjusted T/L: ${adjustedFinalTop.toFixed(2)}/${adjustedFinalLeft.toFixed(2)}, Manual Offset T/L: ${MANUAL_OFFSET_TOP}/${MANUAL_OFFSET_LEFT}`);
-        console.log(`  Debug Adjust: Base T/L: ${calculatedFinalTop.toFixed(2)}/${calculatedFinalLeft.toFixed(2)}, Outer Padding T/L: ${outerPaddingTop}/${outerPaddingLeft}`);
-        // console.log(`  Debug Check: imgRelInner T/L: ${imgTopRelInner}/${imgLeftRelInner}, innerFrameRelOuter T/L: ${innerFrameTopRelOuter}/${innerFrameLeftRelOuter}`); // Keep log concise
-
-        $outlineBox.css({
-            left: finalLeftWithManualOffset + 'px',
-            top: finalTopWithManualOffset + 'px',
-            width: calculatedFinalWidth + 'px',  
-            height: calculatedFinalHeight + 'px', 
-            display: 'block'
-        });
-        // --- End Positioning Logic ---
-
-      } else {
-        // Click was on the image body, not a handle
-        console.log('[ep_image_insert] mousedown on image body (MOVE action initiated)');
-        isMoving = true; // Flag for MOVE drag
-        isDragging = false; // Ensure not resizing
-        startMoveLineNumber = getAllPrevious(targetImageElement.parentNode).length;
-        console.log(`[ep_image_insert] Starting move from line: ${startMoveLineNumber}`);
-        // Optionally, add visual feedback like dimming the image slightly:
-        // $(targetImageElement).css('opacity', 0.6); 
-      }
-      
-      // Prevent default text selection/image drag behavior for BOTH cases
-      evt.preventDefault(); 
+            evt.preventDefault(); // Prevent text selection
+        }
     });
 
-    // --- Add Mousemove Listener (on inner document) ---
+    // --- Mousemove Listener ---
     innerDoc.on('mousemove', function(evt) {
-      if (isDragging) { // RESIZE mousemove
-        const currentX = evt.clientX;
-        const deltaX = currentX - startX;
-        let newPixelWidth = startWidth + deltaX;
-        
-        // Calculate percentage relative to parent container (for clamping/final value, not visual)
-        let newWidthPercent = (newPixelWidth / parentContainerWidth) * 100;
-        newWidthPercent = Math.max(10, Math.min(100, newWidthPercent));
-        // Recalculate pixel width based on clamped percentage to avoid exceeding bounds visually
-        newPixelWidth = parentContainerWidth * (newWidthPercent / 100);
-        
-        // Calculate proportional height
-        const newPixelHeight = newPixelWidth * aspectRatio;
-        
-        // --- Update OUTLINE BOX width AND height --- 
-        $outlineBox.css({
-            width: newPixelWidth + 'px',
-            height: newPixelHeight + 'px'
-        });
-        
-        $inner.css('cursor', 'ew-resize'); 
-      } else if (isMoving) { // MOVE mousemove
-        // Update cursor to indicate moving
-        $inner.css('cursor', 'move');
-        // Later: Add logic for ghost image or line highlighting
-      }
+        if (isDragging) {
+            // --- POSITION OUTLINE BOX (Run only ONCE on first mousemove) ---
+            if (!outlineBoxPositioned) {
+                 if (!targetInnerSpan || !padOuter || !targetOuterSpan || !innerDocBody || !$innerIframe) { // Added more checks
+                     console.error('[ep_image_insert mousemove] Cannot position outline: Required elements missing.');
+                     return; // Cannot proceed
+                 }
+                 console.log('[ep_image_insert mousemove] Positioning outline box (first move - old coord calc method)...');
+                 
+                 // 1. Get Dimensions from mousedown (startWidth/startHeight)
+                 const currentWidth = startWidth; 
+                 const currentHeight = startHeight;
+                 console.log(`[ep_image_insert mousemove] Using Start Dims: W=${currentWidth}, H=${currentHeight}`);
+
+                 if (currentWidth <= 0 || currentHeight <= 0) {
+                     console.warn(`[ep_image_insert mousemove] Invalid start dimensions (${currentWidth}x${currentHeight}). Outline box positioning might fail.`);
+                 }
+
+                 // 2. Get Container Rects & Scrolls 
+                 let innerBodyRect, innerIframeRect, outerBodyRect;
+                 let scrollTopInner, scrollLeftInner, scrollTopOuter, scrollLeftOuter;
+                 try {
+                     innerBodyRect = innerDocBody.getBoundingClientRect();
+                     innerIframeRect = $innerIframe[0].getBoundingClientRect();
+                     outerBodyRect = padOuter[0].getBoundingClientRect();
+                     scrollTopInner = innerDocBody.scrollTop;
+                     scrollLeftInner = innerDocBody.scrollLeft;
+                     scrollTopOuter = padOuter.scrollTop();
+                     scrollLeftOuter = padOuter.scrollLeft();
+                 } catch (e) {
+                     console.error('[ep_image_insert mousemove] Error getting container rects/scrolls:', e);
+                     return; 
+                 }
+
+                 // 3. Calculate Click Relative to Scrolled Inner Body
+                 const clickTopRelInner = mousedownClientY - innerBodyRect.top + scrollTopInner;
+                 const clickLeftRelInner = mousedownClientX - innerBodyRect.left + scrollLeftInner;
+
+                 // 4. Calculate Inner Frame Relative to Scrolled Outer Body
+                 const innerFrameTopRelOuter = innerIframeRect.top - outerBodyRect.top + scrollTopOuter;
+                 const innerFrameLeftRelOuter = innerIframeRect.left - outerBodyRect.left + scrollLeftOuter;
+
+                 // 5. Calculate Base Position of Click Relative to Scrolled Outer Body
+                 const baseClickTopOuter = innerFrameTopRelOuter + clickTopRelInner;
+                 const baseClickLeftOuter = innerFrameLeftRelOuter + clickLeftRelInner;
+
+                 // 6. Calculate desired Outline Top/Left based on Handle
+                 let outlineTop = baseClickTopOuter;
+                 let outlineLeft = baseClickLeftOuter;
+                 if (clickedHandle === 'tr' || clickedHandle === 'br') {
+                    outlineLeft -= currentWidth; // Adjust left if right handle clicked
+                 }
+                 if (clickedHandle === 'bl' || clickedHandle === 'br') {
+                    outlineTop -= currentHeight; // Adjust top if bottom handle clicked
+                 }
+                 console.log(`[ep_image_insert mousemove] Outline Top/Left calculated for Handle (${clickedHandle}): T=${outlineTop}, L=${outlineLeft}`);
+
+                 // 7. Adjust for Outer Padding (Adding)
+                 const outerPadding = window.getComputedStyle(padOuter[0]);
+                 const outerPaddingTop = parseFloat(outerPadding.paddingTop) || 0;
+                 const outerPaddingLeft = parseFloat(outerPadding.paddingLeft) || 0; 
+                 const finalOutlineTop = outlineTop + outerPaddingTop; 
+                 const finalOutlineLeft = outlineLeft + outerPaddingLeft; 
+
+                 // 8. Manual Adjustment (REINSTATED with small values)
+                 const MANUAL_OFFSET_TOP = 9; // Small adjustment
+                 const MANUAL_OFFSET_LEFT = 42; // Small adjustment
+                 const finalTopWithManualOffset = finalOutlineTop + MANUAL_OFFSET_TOP; 
+                 const finalLeftWithManualOffset = finalOutlineLeft + MANUAL_OFFSET_LEFT;
+
+                 // Use the final calculated values with manual offset
+                 console.log(`[ep_image_insert mousemove] Positioning outline box at: L=${finalLeftWithManualOffset}, T=${finalTopWithManualOffset}, W=${currentWidth}, H=${currentHeight}`);
+                 $outlineBoxRef.css({
+                     left: finalLeftWithManualOffset + 'px', 
+                     top: finalTopWithManualOffset + 'px',   
+                     width: currentWidth + 'px',
+                     height: currentHeight + 'px',
+                     display: 'block'
+                 });
+                 outlineBoxPositioned = true; // Mark as positioned
+                 // --- End Positioning Logic ---
+            }
+            // --- END POSITION OUTLINE BOX ---
+
+            // --- Update Outline Box Size (Runs on every mousemove while dragging) ---
+            if ($outlineBoxRef && $outlineBoxRef.length > 0) {
+                const currentX = evt.clientX;
+                const deltaX = currentX - startX;
+                let newPixelWidth = startWidth + deltaX;
+                newPixelWidth = Math.max(20, newPixelWidth);
+                const newPixelHeight = newPixelWidth * aspectRatio;
+                // console.log(`[ep_image_insert mousemove] Updating outline size: W=${newPixelWidth.toFixed(0)}px, H=${newPixelHeight.toFixed(0)}px`); // Reduce log noise
+                $outlineBoxRef.css({
+                    width: newPixelWidth + 'px',
+                    height: newPixelHeight + 'px'
+                });
+            } else {
+                console.error('[ep_image_insert mousemove] Outline box ref missing or invalid during size update!');
+            }
+
+            $inner.css('cursor', 'nwse-resize');
+        }
     });
 
-    // --- Add Mouseup Listener (on inner document) ---
+    // --- Mouseup Listener ---
     innerDoc.on('mouseup', function(evt) {
-      if (isDragging) { // RESIZE mouseup
-        console.log('[ep_image_insert] resize mouseup after drag');
-        const wasDragging = isDragging; // Store drag status
-        isDragging = false;
-        const currentTargetLine = targetLineNumber; // Store line number
-        
-        // Hide outline box
-        $outlineBox.hide();
-        
-        // --- Recalculate final width on mouseup --- 
-        const finalX = evt.clientX;
-        const deltaX = finalX - startX;
-        let finalPixelWidth = startWidth + deltaX;
-        let finalWidthPercent = (finalPixelWidth / parentContainerWidth) * 100;
-        finalWidthPercent = Math.max(10, Math.min(100, finalWidthPercent)); // Clamp
-        console.log(`[ep_image_insert] resize mouseup calculated final width: ${finalWidthPercent.toFixed(0)}%`);
+        if (isDragging) {
+            console.log('[ep_image_insert] resize mouseup');
+            const finalX = evt.clientX;
+            const deltaX = finalX - startX;
+            let finalPixelWidth = startWidth + deltaX;
+            finalPixelWidth = Math.max(20, Math.round(finalPixelWidth));
+            const widthToApply = `${finalPixelWidth}px`;
 
-        if (!isNaN(finalWidthPercent) && currentTargetLine !== -1) {
-          console.log(`[ep_image_insert] Resize Drag finished. Final calculated width: ${finalWidthPercent.toFixed(0)}%. Calling setImageSize.`);
-          context.ace.callWithAce((ace) => {
-              ace.ace_setImageSize(finalWidthPercent.toFixed(0), currentTargetLine);
-          }, 'img_set_width_only', true); 
-        }
-          
-        // Reset target and visual cues
-        targetImageElement = null; 
-        targetLineNumber = -1;
-        startHeight = 0; // Reset height
-        aspectRatio = 1; // Reset ratio
-        $inner.css('cursor', 'auto'); // Reset cursor
-        capturedImgSrc = null; // Reset captured src
+            const finalPixelHeight = finalPixelWidth * aspectRatio;
+            const heightToApply = `${Math.round(finalPixelHeight)}px`;
 
-      } else if (isMoving) { // MOVE mouseup
-        console.log('[ep_image_insert] move mouseup after drag');
-        const wasMoving = isMoving; // Store move status
-        isMoving = false;
-        const currentStartLine = startMoveLineNumber; // Store start line
-        const currentImgSrc = capturedImgSrc; // Store src
-
-        // Reset visual feedback if any was added
-        // $(targetImageElement).css('opacity', 1); // Restore opacity if dimmed
-
-        // Determine endMoveLineNumber based on evt.clientY/evt.clientX
-        let endMoveLineNumber = -1; 
-        try {
-          const innerDocEl = innerDoc[0]; // Get the raw document element
-          const clientX = evt.clientX;
-          const clientY = evt.clientY;
-          console.log(`[ep_image_insert] move mouseup coords (viewport): X=${clientX}, Y=${clientY}`);
-
-          let elementAtPoint = innerDocEl.elementFromPoint(clientX, clientY);
-          console.log('[ep_image_insert] Element at drop point:', elementAtPoint);
-          
-          let lineElement = null;
-          if (elementAtPoint) {
-              // Try to find the closest line div
-              const $closestDiv = $(elementAtPoint).closest('div');
-              // Check if it's a valid line (direct child of body, not body itself)
-              if ($closestDiv.length > 0 && $closestDiv[0] !== innerDocBody && $closestDiv[0].parentNode === innerDocBody) {
-                 lineElement = $closestDiv[0];
-              }
-          }
-
-          if (lineElement) {
-            // Valid line element found directly
-            console.log('[ep_image_insert] Found target line element:', lineElement);
-            endMoveLineNumber = getAllPrevious(lineElement).length;
-            console.log(`[ep_image_insert] Determined end line number: ${endMoveLineNumber}`);
-          } else {
-            // Invalid target or dropped below content - try finding the last line
-            console.warn('[ep_image_insert] Drop target was not a valid line element. Checking for last line.');
-            const $lastLine = $(innerDocBody).children('div').last();
-            if ($lastLine.length > 0) {
-               lineElement = $lastLine[0];
-               endMoveLineNumber = getAllPrevious(lineElement).length;
-               console.log(`[ep_image_insert] Using last line as target: ${endMoveLineNumber}`, lineElement);
+            if (targetInnerSpan) {
+                console.log(`[ep_image_insert mouseup] Applying style W: ${widthToApply}, H: ${heightToApply} to targetInnerSpan`);
+                $(targetInnerSpan).css({
+                    'width': widthToApply,
+                    'height': heightToApply
+                });
             } else {
-               console.warn('[ep_image_insert] No valid last line found (empty pad?). Move cancelled.');
-               endMoveLineNumber = -1; // Keep as invalid
+                console.error('[ep_image_insert mouseup] targetInnerSpan missing, cannot apply style!');
             }
-          }
-        } catch (e) {
-          console.error('[ep_image_insert] Error determining drop line:', e);
-        }
 
-        // Get current image width attribute *before* potentially moving
-        let currentWidth = null; 
-        if (currentStartLine !== -1) { // Only try if start line was valid
-          try {
-             // Need to use callWithAce to access attributes safely
-             context.ace.callWithAce((ace) => {
-               // Use the newly added function via editorInfo
-               currentWidth = ace.ace_getAttributeOnLine(currentStartLine, 'imgWidth');
-             }, 'img_get_width_sync', true); // Use sync call immediately
-             console.log(`[ep_image_insert] Retrieved width ${currentWidth} from line ${currentStartLine}`);
-          } catch (e) {
-            console.error('[ep_image_insert] Error getting image width:', e);
-          }
-        }
+            let targetRange = null;
+            if (targetOuterSpan) {
+                const lineStr = $(targetOuterSpan).attr('data-line');
+                const colStr = $(targetOuterSpan).attr('data-col');
+                if (lineStr !== undefined && colStr !== undefined) {
+                    const lineNum = parseInt(lineStr, 10);
+                    const colStart = parseInt(colStr, 10);
+                    if (!isNaN(lineNum) && !isNaN(colStart)) {
+                         const rangeStart = [lineNum, colStart + 1];
+                         const rangeEnd = [lineNum, colStart + 2];
+                         targetRange = [rangeStart, rangeEnd];
+                         console.log('[ep_image_insert mouseup] Calculated target range from data attributes:', targetRange);
+                    } else {
+                         console.error('[ep_image_insert mouseup] Invalid line/col data attributes:', lineStr, colStr);
+                    }
+                } else {
+                     console.error('[ep_image_insert mouseup] Missing line/col data attributes.');
+                }
+            }
 
-        if (endMoveLineNumber !== -1 && endMoveLineNumber !== currentStartLine && currentImgSrc) {
-          console.log(`[ep_image_insert] Moving image from line ${currentStartLine} to ${endMoveLineNumber}`);
-
-      context.ace.callWithAce((ace) => {
-            // Get target line details before making changes
-            const targetLineEntry = ace.ace_getRep().lines.atIndex(endMoveLineNumber);
-            const targetHasText = targetLineEntry && targetLineEntry.text.length > 0;
-            const targetAlreadyHasImage = ace.ace_getAttributeOnLine(endMoveLineNumber, 'img');
-            const shouldDisplaceText = targetHasText && !targetAlreadyHasImage;
-
-            if (shouldDisplaceText) {
-              console.log(`[ep_image_insert] Target line ${endMoveLineNumber} has text. Displacing text.`);
-              // 1. Remove from old line first
-              ace.ace_removeImage(currentStartLine);
-              // 2. Move cursor to start of target line
-              ace.ace_performSelectionChange([endMoveLineNumber, 0], [endMoveLineNumber, 0]);
-              // 3. Insert newline (pushes text down)
-              ace.ace_doReturnKey();
-              // 4. Add image attributes to the now empty original target line number
-              ace.ace_addImage(endMoveLineNumber, currentImgSrc, currentWidth);
+            if (targetRange) {
+                 console.log(`[ep_image_insert mouseup] Applying image-width=${widthToApply} AND image-height=${heightToApply} to range:`, targetRange);
+                 _aceContext.callWithAce((ace) => {
+                     ace.ace_performDocumentApplyAttributesToRange(targetRange[0], targetRange[1], [
+                         ['image-width', widthToApply],
+                         ['image-height', heightToApply]
+                     ]);
+                 }, 'applyImageWidthAttribute', true);
             } else {
-              // Target line is empty or already has an image, just move attributes
-              console.log(`[ep_image_insert] Target line ${endMoveLineNumber} is empty or has image. Moving attributes directly.`);
-              ace.ace_removeImage(currentStartLine); // Remove from old line
-              ace.ace_addImage(endMoveLineNumber, currentImgSrc, currentWidth); // Add to new line with width
+                 console.error('[ep_image_insert mouseup] Cannot apply attribute: Target range not found.');
             }
-          }, 'img_move_displace', true);
-          
-        } else {
-           console.log(`[ep_image_insert] Move cancelled or target line is the same/invalid.`);
+
+            isDragging = false;
+            outlineBoxPositioned = false; // Reset flag
+            clickedHandle = null; // Reset clicked handle
+            $outlineBoxRef.hide();
+            $inner.css('cursor', 'auto');
+            if (targetOuterSpan) $(targetOuterSpan).removeClass('selected');
+            targetOuterSpan = null;
+            targetInnerSpan = null;
+            targetLineNumber = -1;
+            if (targetOuterSpan) {
+                $(targetOuterSpan).removeAttr('data-line').removeAttr('data-col');
+            }
         }
-        
-        // Reset state
-        $inner.css('cursor', 'auto'); // Reset cursor
-        targetImageElement = null;
-        startMoveLineNumber = -1;
-        capturedImgSrc = null;
-      }
     });
 
-    console.log('[ep_image_insert] Drag listeners attached.');
+    // --- Add Paste Listener --- NEW
+    $inner.on('paste', function(evt) {
+        const clipboardData = evt.originalEvent.clipboardData || window.clipboardData;
+        if (!clipboardData) return;
 
-  }, 'image', true);
+        console.log('[ep_image_insert] Paste event detected.');
+        let foundImage = false;
+
+        // Iterate through clipboard items
+        for (let i = 0; i < clipboardData.items.length; i++) {
+            const item = clipboardData.items[i];
+            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                console.log('[ep_image_insert] Pasted image file found:', file.name, file.type, file.size);
+                foundImage = true; 
+
+                // --- Validation (Simplified duplicate from toolbar.js) ---
+                let isValid = true;
+                const errorTitle = html10n.get('ep_image_insert.error.title');
+                // Mime Type Check
+                if (clientVars.ep_image_insert && clientVars.ep_image_insert.fileTypes) {
+                    const mimedb = clientVars.ep_image_insert.mimeTypes;
+                    const mimeTypeInfo = mimedb[file.type];
+                    let validMime = false;
+                    if (mimeTypeInfo && mimeTypeInfo.extensions) {
+                       for (const fileType of clientVars.ep_image_insert.fileTypes) {
+                           if (mimeTypeInfo.extensions.includes(fileType)) {
+                               validMime = true;
+                               break;
+                           }
+                       }
+                    }
+                    if (!validMime) {
+                       const errorMessage = html10n.get('ep_image_insert.error.fileType');
+                       $.gritter.add({ title: errorTitle, text: errorMessage, sticky: true, class_name: 'error' });
+                       isValid = false;
+                    }
+                }
+                // File Size Check
+                if (isValid && clientVars.ep_image_insert && file.size > clientVars.ep_image_insert.maxFileSize) {
+                   const allowedSize = (clientVars.ep_image_insert.maxFileSize / 1000000);
+                   const errorText = html10n.get('ep_image_insert.error.fileSize', { maxallowed: allowedSize });
+                   $.gritter.add({ title: errorTitle, text: errorText, sticky: true, class_name: 'error' });
+                   isValid = false;
+                }
+                // --- End Validation ---
+
+                if (isValid) {
+                    evt.preventDefault(); // Prevent default paste ONLY if we handle a valid image
+                    console.log('[ep_image_insert] Pasted image is valid. Reading file...');
+                    const reader = new FileReader();
+                    reader.onload = (e_reader) => {
+                        const data = e_reader.target.result;
+                        const img = new Image();
+                        img.onload = () => {
+                            const widthPx = `${img.naturalWidth}px`;
+                            const heightPx = `${img.naturalHeight}px`;
+                            console.log(`[ep_image_insert paste] Image loaded: ${widthPx} x ${heightPx}. Inserting...`);
+                            _aceContext.callWithAce((ace) => {
+                                // Insert image at current cursor pos
+                                ace.ace_doInsertImage(data, widthPx, heightPx);
+                            }, 'pasteImage', true);
+                        };
+                        img.onerror = () => {
+                            console.error('[ep_image_insert paste] Failed to load pasted image data. Inserting without dimensions.');
+                            _aceContext.callWithAce((ace) => {
+                                ace.ace_doInsertImage(data); // Insert without dimensions
+                            }, 'pasteImageError', true);
+                        };
+                        img.src = data;
+                    };
+                    reader.onerror = (e_reader) => {
+                         console.error('[ep_image_insert paste] FileReader error:', e_reader);
+                         $.gritter.add({ title: errorTitle, text: 'Error reading pasted image file.', sticky: true, class_name: 'error' });
+                    };
+                    reader.readAsDataURL(file);
+                }
+                
+                // Handle only the first image found
+                break; 
+            }
+        }
+        
+        if (foundImage) {
+             // We already called preventDefault if the image was valid and handled
+        } else {
+            console.log('[ep_image_insert] No image file found in paste data.');
+            // Allow default paste for non-image content
+        }
+    });
+    // --- End Paste Listener ---
+
+    // Add a click listener to deselect image if clicked outside
+    $(innerDoc).on('mousedown', function(evt) {
+        if (!$(evt.target).closest('.inline-image.image-placeholder').length) {
+             $inner.find('.inline-image.image-placeholder.selected').removeClass('selected');
+        }
+    });
+
+    console.log('[ep_image_insert postAceInit] Event listeners attached.');
+
+  }, 'image_resize_listeners', true);
 };
 
-function getAllPrevious(element) {
-  var res = [];
-  while (element = element.previousElementSibling) 
-    res.push(element);
-  return res
+// Helper function from old plugin to find line number based on DOM element
+function _getLineNumberOfElement(element) {
+  let currentElement = element;
+  let count = 0;
+  while (currentElement = currentElement.previousElementSibling) {
+    count++;
+  }
+  return count;
 }
 
-exports.aceEditorCSS = () => [
-  // Only load ace.css, as other styles were consolidated into it
-  '/ep_image_insert/static/css/ace.css',
-  // '/ep_image_insert/static/css/ep_image_insert.css',
+// Helper function (if needed elsewhere, otherwise keep inside postAceInit)
+/*
+function getAllPrevious(element) {
+  let prev = element.previousSibling;
+  let i = 0;
+  while (prev) {
+    prev = prev.previousSibling;
+    i++;
+  }
+  return i;
+}
+*/
+
+exports.aceEditorCSS = (hookName, context) => {
+  console.log(`[ep_image_insert aceEditorCSS] Adding CSS rules.`);
+  // Return an array containing only the relative path(s) to actual CSS files.
+  // CSS rules themselves should be inside these files.
+  return [
+    'ep_image_insert/static/css/ace.css'
+    // Removed shared.css (404) and inline rules (moved to ace.css)
 ];
+};
 
 // Only register 'img' as the block element
 exports.aceRegisterBlockElements = () => ['img'];
 
-exports.aceCreateDomLine = (name, args) => {
+exports.aceCreateDomLine = (hookName, args, cb) => {
+  // Log entry point and initial arguments, ALWAYS log the input cls
+  console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] HOOK ENTRY. Input cls: "${args.cls}"`);
+
+  if (args.cls && args.cls.indexOf('image:') >= 0) { // Added check for args.cls existence
+    console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] Found image class in: ${args.cls}`);
+    console.log('[ep_image_insert aceCreateDomLine] Full args for image line:', args); // ADDED LOGGING
+    const clss = []; // Classes to keep
+    let escapedSrc;
+    const argClss = args.cls.split(' ');
+
+    // Extract the image src and separate other classes
+    for (let i = 0; i < argClss.length; i++) {
+      const cls = argClss[i];
+      if (cls.startsWith('image:')) {
+        escapedSrc = cls.substring(6); // Keep the image:* class for later use
+        clss.push(cls); // Keep the image:* class itself
+      } else {
+        clss.push(cls);
+      }
+    }
+    // Log remaining classes after extracting image:
+    console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] Original classes kept: "${clss.join(' ')}". Extracted src: ${escapedSrc}`);
+
+    // Add identifying classes for styling and placeholder identification
+    clss.push('inline-image', 'character', 'image-placeholder');
+
+    // Modifier: Inject an empty inner span and resize handles
+    const handleHtml = 
+      '<span class="image-resize-handle tl"></span>' +
+      '<span class="image-resize-handle tr"></span>' +
+      '<span class="image-resize-handle bl"></span>' +
+      '<span class="image-resize-handle br"></span>';
+    const modifier = {
+      extraOpenTags: `<span class="image-inner"></span>${handleHtml}`, // Inject inner span AND handles
+      extraCloseTags: '', // No closing tag needed here as handles are self-contained
+      cls: clss.join(' '), // Pass modified classes back for the outer span
+    };
+
+    // Log output modifier
+    console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] FINAL (placeholder): Output modifier:`, JSON.stringify(modifier));
+    return cb([modifier]);
+
+  } else {
+    // Log when the hook runs but doesn't find the image class
+    // console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] Skipping: No image: prefix found in cls: "${args.cls}".`);
+    return cb(); // Continue default processing if no image class found
+  }
 };
 
-exports.acePostWriteDomLineHTML = (name, context) => {
+const Changeset = require('ep_etherpad-lite/static/js/Changeset');
+exports.acePostWriteDomLineHTML = (hookName, context) => {
+  // The line node is passed in context.node for this hook
+  const lineNode = context.node; 
+  if (!lineNode) {
+    console.log('[ep_image_insert acePostWriteDomLineHTML] No lineNode (context.node) found. Context:', context);
+    console.log('[ep_image_insert acePostWriteDomLineHTML] Exiting hook.');
+    return; 
+  }
+
+  console.log(`[ep_image_insert acePostWriteDomLineHTML] Running for lineNode:`, lineNode);
+
+  // Use querySelectorAll instead of jQuery find
+  const placeholders = lineNode.querySelectorAll('span.image-placeholder');
+  console.log(`[ep_image_insert acePostWriteDomLineHTML] Found ${placeholders.length} placeholder spans using querySelectorAll.`);
+
+  // Note: querySelectorAll returns a NodeList, not a jQuery object
+  placeholders.forEach((placeholder, index) => { 
+    const outerSpan = placeholder; // Clarity: this is the outer span
+    console.log(`[ep_image_insert acePostWriteDomLineHTML] Processing placeholder #${index}:`, outerSpan);
+
+    // Use plain JS for data attribute check if possible, or wrap with $ just for this
+    // Check on the inner span if it exists and has the var set
+    const innerSpan = outerSpan.querySelector('span.image-inner');
+    if (!innerSpan) {
+        console.warn(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} outer span found, but inner span.image-inner is missing.`);
+        return; // Skip if inner span isn't there
+    }
+    if ($(innerSpan).data('css-var-set')) {
+        console.log(`[ep_image_insert acePostWriteDomLineHTML] CSS var already set for placeholder #${index}, skipping.`);
+        return;
+    }
+
+    let escapedSrc = null;
+    let imageWidth = null; // Variable to store width
+    let imageHeight = null; // Variable to store height
+    const classes = outerSpan.className.split(' '); // Get classes from outer span
+    console.log(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} classes:`, classes);
+    for (const cls of classes) {
+      if (cls.startsWith('image:')) {
+        escapedSrc = cls.substring(6);
+        console.log(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} extracted escapedSrc.`);
+        // Don't break yet, might need width class
+      } else if (cls.startsWith('image-width:')) {
+        const widthValue = cls.substring(12);
+        if (/\d+px$/.test(widthValue)) { // Validate format again
+          imageWidth = widthValue;
+          console.log(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} extracted imageWidth: ${imageWidth}`);
+        }
+      } else if (cls.startsWith('image-height:')) {
+        const heightValue = cls.substring(13);
+        if (/\d+px$/.test(heightValue)) { // Validate format again
+          imageHeight = heightValue;
+          console.log(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} extracted imageHeight: ${imageHeight}`);
+        }
+      }
+    }
+
+    // Apply width style if found
+    if (imageWidth) {
+      innerSpan.style.width = imageWidth;
+      console.log(`[ep_image_insert acePostWriteDomLineHTML] Applied width style ${imageWidth} to inner span.`);
+    } else {
+      // Optional: Apply a default width if no attribute is set?
+      // innerSpan.style.width = '100px'; // Example default
+    }
+
+    // Apply height style if found
+    if (imageHeight) {
+      innerSpan.style.height = imageHeight;
+      console.log(`[ep_image_insert acePostWriteDomLineHTML] Applied height style ${imageHeight} to inner span.`);
+    } else {
+      // Optional: Apply a default height if no attribute is set?
+      // innerSpan.style.height = '50px'; // Example default
+    }
+
+    if (escapedSrc) {
+      try {
+        const src = decodeURIComponent(escapedSrc);
+        if (src && (src.startsWith('data:') || src.startsWith('http') || src.startsWith('/'))) {
+          console.log(`[ep_image_insert acePostWriteDomLineHTML] Setting CSS var --image-src for placeholder #${index}`);
+          // Set CSS custom property using plain JS on the INNER span
+          innerSpan.style.setProperty('--image-src', `url("${src}")`);
+          // Mark as processed using jQuery data on the INNER span
+          $(innerSpan).data('css-var-set', true);
+        } else {
+          console.warn(`[ep_image_insert acePostWriteDomLineHTML] Invalid unescaped src found for CSS var: ${src}`);
+          $(innerSpan).data('css-var-set', true); // Mark anyway
+        }
+      } catch (e) {
+        console.error(`[ep_image_insert acePostWriteDomLineHTML] Error setting CSS var for placeholder #${index}:`, e);
+        $(innerSpan).data('css-var-set', true); // Mark anyway
+      }
+  } else {
+      console.warn(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} found, but no image:* class with src.`);
+      $(innerSpan).data('css-var-set', true); // Mark anyway
+    }
+  });
+
+  console.log(`[ep_image_insert acePostWriteDomLineHTML] Finished processing lineNode.`);
 };
 
 exports.aceAttribClasses = (hook, attr) => {
-};
-
-/**
- * Hook to ensure the 'img' attribute is correctly maintained based on the DOM state
- * during content collection.
- */
-exports.collectContentImage = function(name, context){
-  const node = context.node;
-  const state = context.state;
-  const tname = context.tname;
-  let imgSrc = null;
-
-  // Only process our specific span.image element
-  if (tname !== 'span' || !node || !node.classList || !node.classList.contains('image')) {
-    // console.log('[ep_image_insert collectContentImage] Skipping node:', tname, node);
-    return; 
-  }
-  console.log('[ep_image_insert collectContentImage] Processing SPAN.IMAGE node:', node);
-
-  // Prioritize data-img-src
-  if (node.dataset && node.dataset.imgSrc) {
-    imgSrc = node.dataset.imgSrc;
-    console.log(`[ep_image_insert collectContentImage] Found src in data attribute: ${imgSrc}`);
-  } else {
-    console.warn('[ep_image_insert collectContentImage] Could not find data-img-src attribute on span.image', node);
-    // DO NOT fall back to reading inner img tag src here - rely on data attribute
-  }
-
-  // Validate and set the attribute
-  if (imgSrc && (imgSrc.startsWith('data:') || imgSrc.startsWith('http') || imgSrc.startsWith('/'))) {
-    console.log(`[ep_image_insert collectContentImage] Setting state.lineAttributes.img = ${imgSrc}`);
-    state.lineAttributes.img = imgSrc;
-  } else {
-    // If imgSrc is null or invalid, ensure the attribute is cleared for this line
-    // But only if we actually processed our target span
-    console.warn(`[ep_image_insert collectContentImage] Invalid or missing src ('${imgSrc}'). Clearing img attribute.`);
-    delete state.lineAttributes.img; 
-  }
+  // This hook is declared in ep.json but currently unused.
+  // Return empty array as per Etherpad hook docs
+  return []; 
 };
 
 /**
  * Hook to update attributes based on the final DOM state after content collection.
  */
 exports.collectContentPost = function(name, context) {
+  console.log(`[ep_image_insert collectContentPost ENTRY] tname: ${context.tname}, node classList: ${context.node ? context.node.classList : 'NO NODE'}`);
   const node = context.node;
   const state = context.state;
   const tname = context.tname;
 
-  // Check if it's our image span
-  if (tname === 'span' && node && node.classList && node.classList.contains('image')) {
-    console.log('[ep_image_insert collectContentPost] Processing image span:', node);
-    console.log('[ep_image_insert collectContentPost] Span Style:', node.style.cssText);
-    console.log('[ep_image_insert collectContentPost] Current Line Attributes (Before):', JSON.stringify(state.lineAttributes));
+  // Check if it's our INNER image span (REVERTED)
+  if (tname === 'span' && node && node.classList && node.classList.contains('image-inner')) {
+    console.log('[ep_image_insert collectContentPost] Processing image-inner span (HOOK MAY NOT FIRE RELIABLY):', node);
 
-    // --- Update imgWidth based on style --- 
-    let widthPercent = null; // Initialize
-    if (node.style && node.style.width) {
-       const widthMatch = node.style.width.match(/(\d*\.?\d+)(%?)/); // Extract number from width style
+    // Use the node directly as innerNode
+    const innerNode = node;
+ 
+    let widthPx = null;
+    let heightPx = null;
+
+    // --- Update image-width based on style ---
+    console.log(`[ep_image_insert collectContentPost] Reading innerNode.style.width: "${innerNode.style.width}"`);
+    if (innerNode.style && innerNode.style.width) {
+       const widthMatch = innerNode.style.width.match(/^(\d+)(?:px)?$/); // Extract number from width style (assume px)
        if (widthMatch && widthMatch[1]) {
-           widthPercent = parseFloat(widthMatch[1]).toFixed(0); // Get integer percentage
-           if (!isNaN(widthPercent)) {
-              console.log(`[ep_image_insert collectContentPost] Setting state.lineAttributes.imgWidth = ${widthPercent}`);
-              state.lineAttributes.imgWidth = widthPercent;
+           const widthVal = parseInt(widthMatch[1], 10);
+           if (!isNaN(widthVal) && widthVal > 0) {
+              widthPx = `${widthVal}px`;
+              console.log(`[ep_image_insert collectContentPost] Setting state.attributes.image-width = ${widthPx}`);
+              state.attribs = state.attribs || {};
+              state.attribs['image-width'] = widthPx;
            } else {
-             console.warn('[ep_image_insert collectContentPost] Parsed width is NaN.');
-             widthPercent = null; // Reset if NaN
+             console.warn('[ep_image_insert collectContentPost] Parsed width is not a positive number.');
+             // Potentially remove existing attribute if style is invalid?
+             // delete state.attribs['image-width']; 
            }
        } else {
-           console.warn('[ep_image_insert collectContentPost] Could not parse width from style:', node.style.width);
+           console.warn('[ep_image_insert collectContentPost] Could not parse pixel width from innerNode style:', innerNode.style.width);
        }
     } else {
-        console.warn('[ep_image_insert collectContentPost] Node style or style.width missing for width extraction.');
+        console.warn('[ep_image_insert collectContentPost] innerNode style or style.width missing for width extraction.');
+        // Remove attribute if style is missing?
+        // if (state.attribs) delete state.attribs['image-width'];
     }
 
-    // --- Update imgAlign based on style --- 
-    let alignValue = 'none'; 
-    if (node.style && node.style.float) {
-        if (node.style.float === 'left') {
-            alignValue = 'left';
-        } else if (node.style.float === 'right') {
-            alignValue = 'right';
-        }
+    // --- Update image-height based on style ---
+    console.log(`[ep_image_insert collectContentPost] Reading innerNode.style.height: "${innerNode.style.height}"`);
+    if (innerNode.style && innerNode.style.height) {
+       const heightMatch = innerNode.style.height.match(/^(\d+)(?:px)?$/); 
+       if (heightMatch && heightMatch[1]) {
+           const heightVal = parseInt(heightMatch[1], 10);
+           if (!isNaN(heightVal) && heightVal > 0) {
+              heightPx = `${heightVal}px`;
+              console.log(`[ep_image_insert collectContentPost] Setting state.attributes.image-height = ${heightPx}`);
+              state.attribs = state.attribs || {};
+              state.attribs['image-height'] = heightPx;
+           } else {
+             console.warn('[ep_image_insert collectContentPost] Parsed height is not a positive number.');
+             // if (state.attribs) delete state.attribs['image-height']; 
+           }
+       } else {
+           console.warn('[ep_image_insert collectContentPost] Could not parse pixel height from innerNode style:', innerNode.style.height);
+       }
+    } else {
+        console.warn('[ep_image_insert collectContentPost] innerNode style or style.height missing for height extraction.');
+        // if (state.attribs) delete state.attribs['image-height'];
     }
-    console.log(`[ep_image_insert collectContentPost] Setting state.lineAttributes.imgAlign = ${alignValue}`);
-    state.lineAttributes.imgAlign = alignValue;
-    
-    console.log('[ep_image_insert collectContentPost] Current Line Attributes (After):', JSON.stringify(state.lineAttributes));
-
   }
 };
 
@@ -610,43 +851,70 @@ exports.aceKeyEvent = (hookName, context, cb) => {
   const { evt, editorInfo } = context;
   const rep = editorInfo.ace_getRep();
   const lineNumber = rep.selStart[0];
+  const currentColumn = rep.selStart[1]; // Cursor position BEFORE key press
   const key = evt.key;
 
-  // Check if it's a printable character (simplistic check)
-  const isPrintable = key && key.length === 1 && !evt.ctrlKey && !evt.metaKey && !evt.altKey;
-  const isNavigationOrDeletion = [
-    'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 
-    'Backspace', 'Delete', 'Enter', 'Tab', 
-    'Home', 'End', 'PageUp', 'PageDown'
-  ].includes(key);
+  // Log entry
+  console.log(`[ep_image_insert aceKeyEvent L#${lineNumber} C#${currentColumn}] Key: '${key}'`);
 
-  if (isPrintable || (!isNavigationOrDeletion && key && key.length === 1)) { 
-    // Check if the current line contains an image span in the DOM
-    const lineNode = rep.lines.atIndex(lineNumber);
-    const lineElement = lineNode && lineNode.lineNode;
-    const containsImage = lineElement && $(lineElement).find('span.image').length > 0;
-
-    if (containsImage) {
-      console.log('[ep_image_insert aceKeyEvent] Prevented typing on image line:', key);
-      evt.preventDefault(); // Stop the original key press
-
-      // Determine target line and position (start of next line)
-      const targetLine = lineNumber + 1;
-      const targetCol = 0;
-
-      // Move cursor to the start of the next line
-      editorInfo.ace_performSelectionChange([targetLine, targetCol], [targetLine, targetCol]);
-
-      // Insert the character at the new position
-      // Need to ensure this happens *after* selection change is processed
-      // Using a minimal timeout often works for this kind of race condition
-      setTimeout(() => {
-        editorInfo.ace_replaceRange([targetLine, targetCol], [targetLine, targetCol], key);
-      }, 0);
-
-      return cb(true); // Event handled
-    }
-  }
+  // Simplified check: Prevent typing immediately before the final ZWSP 
+  // if the character before that is the attributed NBSP? This might be too complex/
+  // brittle. Let's remove the prevention logic for now.
 
   return cb(false); // Let Etherpad handle other keys normally
 };
+
+// Add CSS during aceInitInnerdocbodyHead hook
+// ... (keep existing aceInitInnerdocbodyHead code) ...
+
+// exports.aceInitInnerdocbodyHead = aceInitInnerdocbodyHead; // Removed this line as function is undefined
+// exports.aceCreateDomLine = aceCreateDomLine; // Removed redundant export
+// exports.aceAttribsToClasses = aceAttribsToClasses; // Removed redundant export
+// exports.aceRegisterBlockElements = aceRegisterBlockElements; // Removed redundant export
+// exports.aceEditorCSS = aceEditorCSS; // Removed redundant export
+
+// *** ZWSP Image Insertion Logic ***
+const doInsertImage = function (src, widthPx, heightPx) {
+  const ZWSP = '\u200B'; // Use SINGLE backslash for correct Unicode escape
+  const PLACEHOLDER = '\u200B'; // Changed from '\uFFFC' (Object Replacement Char)
+
+  const editorInfo = this.editorInfo;
+  const rep = editorInfo.ace_getRep();
+  const docMan = this.documentAttributeManager;
+
+  if (!editorInfo || !rep || !rep.selStart || !docMan || !src) {
+    console.error('[ep_image_insert doInsertImage] Missing context or src');
+    return;
+  }
+
+  const cursorPos = rep.selStart; // Use selection start as insertion point
+
+  // 1. Insert ZWSP + PLACEHOLDER + ZWSP into the model
+  editorInfo.ace_replaceRange(cursorPos, cursorPos, ZWSP + PLACEHOLDER + ZWSP);
+
+  // 2. Calculate range for the placeholder character (middle character)
+  const imageAttrStart = [cursorPos[0], cursorPos[1] + ZWSP.length];          // After first ZWSP
+  const imageAttrEnd = [cursorPos[0], cursorPos[1] + ZWSP.length + PLACEHOLDER.length]; // Before second ZWSP
+
+  // 3. Encode the src
+  const escapedSrc = encodeURIComponent(src);
+
+  // 4. Prepare attributes
+  const attributesToSet = [['image', escapedSrc]];
+  if (widthPx && /^\d+px$/.test(widthPx)) { // Validate format
+      attributesToSet.push(['image-width', widthPx]);
+      console.log(`[ep_image_insert doInsertImage] Applying initial image-width: ${widthPx}`);
+  }
+  if (heightPx && /^\d+px$/.test(heightPx)) { // Validate format
+      attributesToSet.push(['image-height', heightPx]);
+      console.log(`[ep_image_insert doInsertImage] Applying initial image-height: ${heightPx}`);
+  }
+
+  // 5. Apply the attributes
+  console.log(`[ep_image_insert doInsertImage] Applying attributes to range:`, imageAttrStart, imageAttrEnd, attributesToSet);
+  docMan.setAttributesOnRange(imageAttrStart, imageAttrEnd, attributesToSet);
+};
+// *** End ZWSP Logic ***
+
+// Function to parse aline (Simplified - might need adjustment based on exact format)
+/* function getAttribsAtColumn(aline, col, apool) { ... } */

@@ -78,3 +78,76 @@
   border: 1px solid #666;
 }
 */
+
+/* Rules moved from clientHooks.js aceEditorCSS */
+.ace-line .inline-image.white-space-pre-wrap {
+  white-space: pre-wrap !important;
+}
+
+span.inline-image.character {
+  white-space: pre-wrap !important;
+}
+
+/* CSS Pseudo-element approach for image display */
+span.inline-image.image-placeholder {
+  /* Hide original text content (placeholder character or "undefined") */
+  color: transparent; /* Make text invisible */
+  line-height: 0; /* Try to collapse height */
+  display: inline-block;
+  vertical-align: middle; /* Align the container span */
+  /* Prevent selection of the underlying space/character */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  position: relative; /* Added */
+}
+
+/* Style the INNER span to display the image */
+span.inline-image.image-placeholder span.image-inner {
+  content: ''; /* Necessary for pseudo-element */
+  display: inline-block;
+  /* Explicit dimensions needed for background */
+  /* width: 100px; */  /* REMOVED Set explicit width */
+  /* height: 50px; */ /* REMOVED Set explicit height */
+  max-height: 100em; /* Keep max height constraint */
+  vertical-align: middle;
+  background-image: var(--image-src); /* Use the CSS variable */
+  background-size: contain; /* Use contain to fit image */
+  background-repeat: no-repeat;
+  background-position: center center;
+}
+
+/* === START Styles for resize handles (ported from old plugin) === */
+
+/* Base style for handle spans */
+span.inline-image.image-placeholder span.image-resize-handle {
+  content: '';
+  position: absolute;
+  width: 7px; 
+  height: 7px;
+  background-color: #1a73e8; /* Google Docs blue square */
+  border: 1px solid #fff; /* White border for visibility */
+  z-index: 1;
+  display: none; /* Initially hidden */
+}
+
+/* Show handles on hover/focus of the outer container */
+/* Adjust as needed for desired trigger (e.g., on click/selection) */
+span.inline-image.image-placeholder:hover span.image-resize-handle,
+span.inline-image.image-placeholder:focus span.image-resize-handle,
+span.inline-image.image-placeholder.selected span.image-resize-handle { /* Added .selected class trigger */
+  display: block;
+}
+
+/* Position individual handles */
+span.inline-image.image-placeholder span.image-resize-handle.tl { top: -2px; left: -2px; cursor: nwse-resize; }
+span.inline-image.image-placeholder span.image-resize-handle.tr { top: -2px; right: -2px; cursor: nesw-resize; }
+span.inline-image.image-placeholder span.image-resize-handle.bl { bottom: -2px; left: -2px; cursor: nesw-resize; }
+span.inline-image.image-placeholder span.image-resize-handle.br { bottom: -2px; right: -2px; cursor: nwse-resize; }
+
+/* Hide the handles if the image inner span is very small (example thresholds) */
+/* This might need JS adjustment based on calculated width */
+/* span.inline-image.image-placeholder span.image-inner[style*="width: 10px"] ~ span.image-resize-handle, ... */
+
+/* === END Styles for resize handles === */
