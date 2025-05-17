@@ -104,7 +104,6 @@ exports.expressConfigure = (hookName, context) => {
         if (isDone) return;
         isDone = true;
 
-        // res.status(error.statusCode || 500).json(error);
         req.unpipe(busboy);
         drainStream(req);
         busboy.removeAllListeners();

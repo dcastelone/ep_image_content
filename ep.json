@@ -25,7 +25,8 @@
         "loadSettings": "ep_image_insert/settings",
         "padRemove": "ep_image_insert/index",
         "eejsBlock_styles": "ep_image_insert/index",
-        "eejsBlock_timesliderStyles": "ep_image_insert/index"
+        "eejsBlock_timesliderStyles": "ep_image_insert/index",
+        "import": "ep_image_insert/index"
       }
     }
   ]

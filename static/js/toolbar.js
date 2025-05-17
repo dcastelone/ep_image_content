@@ -64,8 +64,6 @@ const insertInlineImage = (ace, imageData) => {
   const start = rep.selStart;
   const end = rep.selEnd;
 
-  console.log(`[ep_image_insert] Inserting ZWSP + Image Placeholder + ZWSP ('${textToInsert}') with attribute ${attrKey}=${attrValue}`);
-
   // Add the placeholder characters, replacing selection if any
   ace.ace_replaceRange(start, end, textToInsert);
 
@@ -113,20 +111,15 @@ exports.postToolbarInit = (hook, context) => {
           img.onload = () => {
             const widthPx = `${img.naturalWidth}px`;
             const heightPx = `${img.naturalHeight}px`;
-            console.log(`[ep_image_insert toolbar] Base64 Image loaded: ${widthPx} x ${heightPx}`);
             context.ace.callWithAce((ace) => {
-              // const imageLineNr = _handleNewLines(ace); // REMOVED: _handleNewLines is not defined/needed
               // Pass dimensions to doInsertImage (inserts at cursor)
               ace.ace_doInsertImage(data, widthPx, heightPx); // REMOVED line number
-              // ace.ace_doReturnKey(); // REMOVED: Don't force newline
             }, 'imgBase64', true);
           };
           img.onerror = () => {
              console.error('[ep_image_insert toolbar] Failed to load Base64 image data to get dimensions. Inserting without dimensions.');
              context.ace.callWithAce((ace) => {
-               // const imageLineNr = _handleNewLines(ace); // REMOVED
                ace.ace_doInsertImage(data); // REMOVED line number
-               // ace.ace_doReturnKey(); // REMOVED
             }, 'imgBase64Error', true);
           };
           img.src = data; // Trigger load
@@ -153,20 +146,15 @@ exports.postToolbarInit = (hook, context) => {
             img.onload = () => {
               const widthPx = `${img.naturalWidth}px`;
               const heightPx = `${img.naturalHeight}px`;
-              console.log(`[ep_image_insert toolbar] Uploaded Image loaded: ${widthPx} x ${heightPx}`);
               context.ace.callWithAce((ace) => {
-                // const imageLineNr = _handleNewLines(ace); // REMOVED
                 // Pass dimensions to doInsertImage (inserts at cursor)
                 ace.ace_doInsertImage(data, widthPx, heightPx); // REMOVED line number
-                // ace.ace_doReturnKey(); // REMOVED
               }, 'imgUpload', true);
             };
             img.onerror = () => {
                console.error(`[ep_image_insert toolbar] Failed to load uploaded image URL (${data}) to get dimensions. Inserting without dimensions.`);
                context.ace.callWithAce((ace) => {
-                 // const imageLineNr = _handleNewLines(ace); // REMOVED
                  ace.ace_doInsertImage(data); // REMOVED line number
-                 // ace.ace_doReturnKey(); // REMOVED
               }, 'imgUploadError', true);
             };
             img.src = data; // Trigger load using the URL

@@ -1,18 +1,8 @@
 .image {
   display: inline-block;
   position: relative;
-  /* border: 1px dotted #ccc; /* Remove static border */
-  /* cursor: ew-resize; /* Remove static cursor */
   line-height: 0;
 }
-
-/* Remove hover rule */
-/*
-.image:hover {
-  border: 1px solid blue; 
-  cursor: ew-resize;
-}
-*/
 
 .image>img {
   height: auto !important;
@@ -22,24 +12,6 @@
   user-select: none;
   display: block;
 }
-
-/* Remove ::before/::after styles */
-/*
-.image::before,
-.image::after {
-  ...
-}
-*/
-/*
-.image::before {
-  ...
-}
-*/
-/*
-.image::after {
-  ...
-}
-*/
 
 /* Styles for the new handle spans */
 .image span.image-resize-handle {
@@ -68,17 +40,6 @@
     display: none;
 }
 
-/* Remove original control container styles if no longer needed */
-/*
-.control-container>.buttonicon {
-  height: 24px;
-  width: 24px;
-}
-.control-container .active {
-  border: 1px solid #666;
-}
-*/
-
 /* Rules moved from clientHooks.js aceEditorCSS */
 .ace-line .inline-image.white-space-pre-wrap {
   white-space: pre-wrap !important;
@@ -101,17 +62,16 @@ span.inline-image.image-placeholder {
   -ms-user-select: none;
   user-select: none;
   position: relative; /* Added */
+  max-width: 100%; /* ADDED to make placeholder respect its container's width */
 }
 
 /* Style the INNER span to display the image */
 span.inline-image.image-placeholder span.image-inner {
   content: ''; /* Necessary for pseudo-element */
-  display: inline-block;
-  /* Explicit dimensions needed for background */
-  /* width: 100px; */  /* REMOVED Set explicit width */
-  /* height: 50px; */ /* REMOVED Set explicit height */
-  max-height: 100em; /* Keep max height constraint */
-  vertical-align: middle;
+  display: inline-block; /* Or block, if placeholder only contains this and handles */
+  max-width: 100%; /* Keep: ensures inner span respects outer placeholder's width */
+  height: auto; /* ADDED: Allow aspect-ratio to determine height */
+  aspect-ratio: var(--image-css-aspect-ratio, 1 / 1); /* ADDED: Use CSS var, fallback to 1:1 */
   background-image: var(--image-src); /* Use the CSS variable */
   background-size: contain; /* Use contain to fit image */
   background-repeat: no-repeat;
@@ -148,6 +108,5 @@ span.inline-image.image-placeholder span.image-resize-handle.br { bottom: -2px; 
 
 /* Hide the handles if the image inner span is very small (example thresholds) */
 /* This might need JS adjustment based on calculated width */
-/* span.inline-image.image-placeholder span.image-inner[style*="width: 10px"] ~ span.image-resize-handle, ... */
 
 /* === END Styles for resize handles === */

@@ -2,11 +2,12 @@
 
 // This hook is called **before** the text of a line/segment is processed by the Changeset library.
 const collectContentPre = (hook, context) => {
-  // Extract image src, width, and height from class list
+  // Extract image src, width, height, and aspect ratio from class list
   const classes = context.cls ? context.cls.split(' ') : [];
   let escapedSrc = null;
   let widthValue = null;
   let heightValue = null;
+  let aspectRatioValue = null;
 
   for (const cls of classes) {
       if (cls.startsWith('image:')) {
@@ -21,16 +22,20 @@ const collectContentPre = (hook, context) => {
           if (/\d+px$/.test(potentialHeight)) { // Validate format
              heightValue = potentialHeight;
           }
+      } else if (cls.startsWith('imageCssAspectRatio:')) {
+          // Expects a floating point number, e.g., "1.5" or "0.75"
+          const potentialAspectRatio = cls.substring(20);
+          if (!isNaN(parseFloat(potentialAspectRatio))) { // Validate format (is a number)
+            aspectRatioValue = potentialAspectRatio;
+          }
       }
   }
 
   // Re-apply attributes if found
   if (escapedSrc) {
-    console.log('[ep_image_insert collectContentPre] Context for image attr:', context);
     try {
       // Re-apply the 'image' attribute with its escaped value
       // Etherpad uses 'key::value' format for attributes with values in doAttrib
-      console.log(`[ep_image_insert collectContentPre] Applying image attribute: image::${escapedSrc}`);
       context.cc.doAttrib(context.state, `image::${escapedSrc}`);
     } catch (e) {
       console.error('[ep_image_insert collectContentPre] Error applying image attribute:', e);
@@ -38,7 +43,6 @@ const collectContentPre = (hook, context) => {
   }
   if (widthValue) {
     try {
-        console.log(`[ep_image_insert collectContentPre] Applying image-width attribute: image-width::${widthValue}`);
         context.cc.doAttrib(context.state, `image-width::${widthValue}`);
     } catch (e) {
         console.error('[ep_image_insert collectContentPre] Error applying image-width attribute:', e);
@@ -46,10 +50,16 @@ const collectContentPre = (hook, context) => {
   }
   if (heightValue) {
     try {
-        console.log(`[ep_image_insert collectContentPre] Applying image-height attribute: image-height::${heightValue}`);
         context.cc.doAttrib(context.state, `image-height::${heightValue}`);
     } catch (e) {
         console.error('[ep_image_insert collectContentPre] Error applying image-height attribute:', e);
+    }
+  }
+  if (aspectRatioValue) {
+    try {
+        context.cc.doAttrib(context.state, `imageCssAspectRatio::${aspectRatioValue}`);
+    } catch (e) {
+        console.error('[ep_image_insert collectContentPre] Error applying imageCssAspectRatio attribute:', e);
     }
   }
 };

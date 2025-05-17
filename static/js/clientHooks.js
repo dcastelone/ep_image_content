@@ -37,19 +37,18 @@ const image = {
 */
 
 exports.aceAttribsToClasses = function(name, context) {
-  // console.log('[ep_image_insert aceAttribsToClasses]', context); // DEBUG
   if (context.key === 'image' && context.value) {
-    console.log(`[ep_image_insert aceAttribsToClasses] Found image attribute, length: ${context.value.length}`); // Don't log full base64
     return ['image:' + context.value];
   }
-  // New: Add image-width and image-height attributes
   if (context.key === 'image-width' && context.value) {
-    console.log(`[ep_image_insert aceAttribsToClasses] Found image-width: ${context.value}`);
     return ['image-width:' + context.value];
   }
   if (context.key === 'image-height' && context.value) {
-    console.log(`[ep_image_insert aceAttribsToClasses] Found image-height: ${context.value}`);
     return ['image-height:' + context.value];
+  }
+  // ADDED for imageCssAspectRatio
+  if (context.key === 'imageCssAspectRatio' && context.value) {
+    return ['imageCssAspectRatio:' + context.value];
   }
   return [];
 };
@@ -74,9 +73,7 @@ exports.aceInitialized = (hook, context) => {
 
 // Function to render placeholders into actual images
 const renderImagePlaceholders = (rootElement) => {
-  console.log('[ep_image_insert] Searching for placeholders within:', rootElement);
   const placeholders = $(rootElement).find('span.image-placeholder');
-  console.log(`[ep_image_insert] Found ${placeholders.length} placeholders.`);
 
   placeholders.each(function() {
     const $placeholder = $(this);
@@ -85,12 +82,10 @@ const renderImagePlaceholders = (rootElement) => {
         return;
     }
 
-    console.log('[ep_image_insert] Processing placeholder:', this);
     const attribsData = $placeholder.data('image-attribs');
     if (typeof attribsData === 'string') {
       try {
         const imageData = JSON.parse(attribsData);
-        console.log('[ep_image_insert] Parsed image data:', imageData);
 
         if (imageData && imageData.src) {
           const $img = $('<img>').attr('src', imageData.src);
@@ -108,20 +103,16 @@ const renderImagePlaceholders = (rootElement) => {
           $placeholder.empty().append($img);
           // Mark as processed
           $placeholder.data('processed-image', true);
-          // Remove the data attribute after processing? Maybe keep for debugging.
-          console.log('[ep_image_insert] Replaced placeholder with image:', $img[0]);
         } else {
-          console.warn('[ep_image_insert] Invalid image data found in placeholder:', attribsData);
           $placeholder.text('[Invalid Image]'); // Show error inline
           $placeholder.data('processed-image', true); // Mark as processed to avoid retrying
         }
       } catch (e) {
-        console.error('[ep_image_insert] Failed to parse image data:', attribsData, e);
+        console.error('[ep_image_insert] Failed to parse image data:', attribsData, e); // Keep error
         $placeholder.text('[Parse Error]'); // Show error inline
         $placeholder.data('processed-image', true); // Mark as processed to avoid retrying
       }
     } else {
-      console.warn('[ep_image_insert] Missing or invalid data-image-attribs:', attribsData);
       $placeholder.text('[Missing Data]'); // Show error inline
       $placeholder.data('processed-image', true); // Mark as processed to avoid retrying
     }
@@ -130,8 +121,6 @@ const renderImagePlaceholders = (rootElement) => {
 
 // Use MutationObserver to render images when placeholders appear in the DOM
 exports.postAceInit = function (hook, context) {
-  console.log('[ep_image_insert] postAceInit: Hook running.');
-
   const padOuter = $('iframe[name="ace_outer"]').contents().find('body');
   if (padOuter.length === 0) {
       console.error('[ep_image_insert postAceInit] Could not find outer pad body.');
@@ -152,9 +141,6 @@ exports.postAceInit = function (hook, context) {
       });
       // Append to OUTER body (like old plugin)
       padOuter.append($outlineBox);
-      console.log('[ep_image_insert postAceInit] Added resize outline box to OUTER body.');
-  } else {
-      console.log('[ep_image_insert postAceInit] Resize outline box already exists.');
   }
 
   // Initialize outline box reference OUTSIDE callWithAce
@@ -167,14 +153,9 @@ exports.postAceInit = function (hook, context) {
      console.error('[ep_image_insert postAceInit] FATAL: Could not find #imageResizeOutline OUTSIDE callWithAce.');
      // Cannot proceed without the outline box
      return; 
-  } else {
-     console.log('[ep_image_insert postAceInit] Successfully found #imageResizeOutline OUTSIDE callWithAce.', $outlineBoxRef[0]);
   }
 
   context.ace.callWithAce((ace) => {
-    console.log('[ep_image_insert postAceInit] Inside callWithAce.');
-
-    // Get inner iframe body (similar to old plugin)
     const $innerIframe = $('iframe[name="ace_outer"]').contents().find('iframe[name="ace_inner"]');
     if ($innerIframe.length === 0) {
         console.error('ep_image_insert: ERROR - Could not find inner iframe (ace_inner).');
@@ -195,6 +176,7 @@ exports.postAceInit = function (hook, context) {
     let startWidth = 0;
     let startHeight = 0;
     let aspectRatio = 1;
+    let currentVisualAspectRatioHW = 1; // ADDED for H/W ratio preservation
     let targetOuterSpan = null; // Our main placeholder span
     let targetInnerSpan = null; // The span we style with the background
     let targetLineNumber = -1; // Store line number of dragged image
@@ -202,8 +184,6 @@ exports.postAceInit = function (hook, context) {
     let mousedownClientX = 0; // NEW: Record viewport X on mousedown
     let mousedownClientY = 0; // NEW: Record viewport Y on mousedown
     let clickedHandle = null; // NEW: Store which handle was clicked ('tl', 'tr', 'bl', 'br')
-    // let parentContainerWidth = 0; // Might need recalculation
-    // let targetAttrRange = null; // To store the range for attribute update
 
     // --- Mousedown Listener ---
     $inner.on('mousedown', '.inline-image.image-placeholder', function(evt) {
@@ -222,6 +202,7 @@ exports.postAceInit = function (hook, context) {
         if (!targetInnerSpan) {
             console.error('[ep_image_insert mousedown] Could not find inner span.');
             targetOuterSpan = null; // Reset if invalid
+            $targetOuterSpan.removeClass('selected'); // Deselect if invalid
             return;
         }
 
@@ -229,7 +210,6 @@ exports.postAceInit = function (hook, context) {
         const isResizeHandle = target.hasClass('image-resize-handle');
 
         if (isResizeHandle) {
-            console.log('[ep_image_insert] mousedown on resize handle');
             isDragging = true;
             outlineBoxPositioned = false; // Reset flag on new drag start
             startX = evt.clientX; // Keep relative mouse tracking start point
@@ -237,64 +217,72 @@ exports.postAceInit = function (hook, context) {
             mousedownClientY = evt.clientY; // Record viewport Y
             startWidth = targetInnerSpan.offsetWidth || parseInt(targetInnerSpan.style.width, 10) || 0;
             startHeight = targetInnerSpan.offsetHeight || parseInt(targetInnerSpan.style.height, 10) || 0;
-            aspectRatio = (startWidth > 0 && startHeight > 0) ? (startHeight / startWidth) : 1;
+            currentVisualAspectRatioHW = (startWidth > 0 && startHeight > 0) ? (startHeight / startWidth) : 1;
 
-            // Determine which handle was clicked
             if (target.hasClass('tl')) clickedHandle = 'tl';
             else if (target.hasClass('tr')) clickedHandle = 'tr';
             else if (target.hasClass('bl')) clickedHandle = 'bl';
             else if (target.hasClass('br')) clickedHandle = 'br';
-            else clickedHandle = null; // Should not happen if isResizeHandle is true
-            
-            console.log(`[ep_image_insert mousedown] Initial W/H read: ${startWidth}/${startHeight}. Click Viewport: X=${mousedownClientX}, Y=${mousedownClientY}. Handle: ${clickedHandle}`);
+            else clickedHandle = null;
 
-            // Store line number and attempt to calculate column index immediately
-            const lineNode = targetOuterSpan ? targetOuterSpan.parentNode : null;
-            if (lineNode) {
-                let imageIndex = 0;
-                let currentSibling = targetOuterSpan.previousElementSibling;
-                while (currentSibling) {
-                    if (currentSibling.classList.contains('image-placeholder')) {
-                        imageIndex++;
-                    }
-                    currentSibling = currentSibling.previousElementSibling;
+            // Store line number and calculate column index
+            const lineElement = $(targetOuterSpan).closest('.ace-line')[0]; // Get the main line DIV
+
+            if (lineElement) {
+                const allImagePlaceholdersInLine = Array.from(lineElement.querySelectorAll('.inline-image.image-placeholder'));
+                const imageIndex = allImagePlaceholdersInLine.indexOf(targetOuterSpan);
+
+                if (imageIndex === -1) {
+                    console.error('[ep_image_insert mousedown] Clicked image placeholder not found within its line DOM elements.');
+                    isDragging = false; // Stop drag
+                    $targetOuterSpan.removeClass('selected');
+                    targetOuterSpan = null;
+                    return;
                 }
-                console.log(`[ep_image_insert mousedown] Calculated imageIndex: ${imageIndex}`);
-                targetLineNumber = _getLineNumberOfElement(lineNode);
-                console.log(`[ep_image_insert mousedown] Stored target line number: ${targetLineNumber}`);
+
+                targetLineNumber = _getLineNumberOfElement(lineElement);
                 $(targetOuterSpan).attr('data-line', targetLineNumber);
+
                 _aceContext.callWithAce((ace) => {
                     const rep = ace.ace_getRep();
+                    if (!rep.lines.atIndex(targetLineNumber)) {
+                        console.error(`[ep_image_insert mousedown] Line ${targetLineNumber} does not exist in rep.`);
+                        $(targetOuterSpan).removeAttr('data-col'); // Clear potentially stale data
+                        return;
+                    }
                     const lineText = rep.lines.atIndex(targetLineNumber).text;
-                    const placeholderSequence = '\u200B\u200B\u200B';
+                    const placeholderSequence = '\u200B\u200B\u200B'; // ZWSP + Placeholder + ZWSP
+                    const placeholderSequenceLength = placeholderSequence.length;
+
                     let colStart = -1;
-                    let currentOccurence = 0;
                     let searchFromIndex = 0;
-                    while (currentOccurence <= imageIndex) {
+
+                    for (let k = 0; k <= imageIndex; k++) {
                         const foundIndex = lineText.indexOf(placeholderSequence, searchFromIndex);
                         if (foundIndex === -1) {
                             colStart = -1;
-                            console.error(`[ep_image_insert mousedown] Failed to find ${imageIndex}-th sequence (found ${currentOccurence}) in line: "${lineText}"`);
                             break;
                         }
-                        if (currentOccurence === imageIndex) {
+                        if (k === imageIndex) {
                             colStart = foundIndex;
                             break;
                         }
-                        currentOccurence++;
-                        searchFromIndex = foundIndex + 1;
+                        searchFromIndex = foundIndex + placeholderSequenceLength; // Correctly advance search index
                     }
+
                     if (colStart >= 0) {
-                        console.log(`[ep_image_insert mousedown] Found ${imageIndex}-th sequence at column: ${colStart}`);
                         $(targetOuterSpan).attr('data-col', colStart);
                     } else {
-                        console.error(`[ep_image_insert mousedown] Could not find ${imageIndex}-th placeholder sequence in line text: "${lineText}"`);
+                        console.error(`[ep_image_insert mousedown] Could not find the ${imageIndex}-th placeholder sequence in line text for line ${targetLineNumber}: "${lineText}"`);
                         $(targetOuterSpan).removeAttr('data-col');
                     }
                 }, 'getImageColStart', true);
             } else {
-                console.error('[ep_image_insert mousedown] Could not find line node to store line number.');
-                targetLineNumber = -1;
+                console.error('[ep_image_insert mousedown] Could not find parent .ace-line for the clicked image.');
+                isDragging = false; // Stop drag
+                $targetOuterSpan.removeClass('selected');
+                targetOuterSpan = null;
+                return;
             }
 
             evt.preventDefault(); // Prevent text selection
@@ -310,15 +298,12 @@ exports.postAceInit = function (hook, context) {
                      console.error('[ep_image_insert mousemove] Cannot position outline: Required elements missing.');
                      return; // Cannot proceed
                  }
-                 console.log('[ep_image_insert mousemove] Positioning outline box (first move - old coord calc method)...');
                  
                  // 1. Get Dimensions from mousedown (startWidth/startHeight)
                  const currentWidth = startWidth; 
                  const currentHeight = startHeight;
-                 console.log(`[ep_image_insert mousemove] Using Start Dims: W=${currentWidth}, H=${currentHeight}`);
 
                  if (currentWidth <= 0 || currentHeight <= 0) {
-                     console.warn(`[ep_image_insert mousemove] Invalid start dimensions (${currentWidth}x${currentHeight}). Outline box positioning might fail.`);
                  }
 
                  // 2. Get Container Rects & Scrolls 
@@ -358,7 +343,6 @@ exports.postAceInit = function (hook, context) {
                  if (clickedHandle === 'bl' || clickedHandle === 'br') {
                     outlineTop -= currentHeight; // Adjust top if bottom handle clicked
                  }
-                 console.log(`[ep_image_insert mousemove] Outline Top/Left calculated for Handle (${clickedHandle}): T=${outlineTop}, L=${outlineLeft}`);
 
                  // 7. Adjust for Outer Padding (Adding)
                  const outerPadding = window.getComputedStyle(padOuter[0]);
@@ -373,8 +357,6 @@ exports.postAceInit = function (hook, context) {
                  const finalTopWithManualOffset = finalOutlineTop + MANUAL_OFFSET_TOP; 
                  const finalLeftWithManualOffset = finalOutlineLeft + MANUAL_OFFSET_LEFT;
 
-                 // Use the final calculated values with manual offset
-                 console.log(`[ep_image_insert mousemove] Positioning outline box at: L=${finalLeftWithManualOffset}, T=${finalTopWithManualOffset}, W=${currentWidth}, H=${currentHeight}`);
                  $outlineBoxRef.css({
                      left: finalLeftWithManualOffset + 'px', 
                      top: finalTopWithManualOffset + 'px',   
@@ -392,9 +374,20 @@ exports.postAceInit = function (hook, context) {
                 const currentX = evt.clientX;
                 const deltaX = currentX - startX;
                 let newPixelWidth = startWidth + deltaX;
-                newPixelWidth = Math.max(20, newPixelWidth);
-                const newPixelHeight = newPixelWidth * aspectRatio;
-                // console.log(`[ep_image_insert mousemove] Updating outline size: W=${newPixelWidth.toFixed(0)}px, H=${newPixelHeight.toFixed(0)}px`); // Reduce log noise
+
+                if (targetOuterSpan) {
+                    const $tableCell = $(targetOuterSpan).closest('td, th');
+                    if ($tableCell.length > 0) {
+                        const parentWidth = $tableCell.width();
+                        if (parentWidth > 0) { // Ensure parentWidth is positive
+                           newPixelWidth = Math.min(newPixelWidth, parentWidth);
+                        }
+                    }
+                }
+
+                newPixelWidth = Math.max(20, newPixelWidth); // Apply min width *after* parent constraint
+
+                const newPixelHeight = newPixelWidth * currentVisualAspectRatioHW; // Use currentVisualAspectRatioHW
                 $outlineBoxRef.css({
                     width: newPixelWidth + 'px',
                     height: newPixelHeight + 'px'
@@ -410,22 +403,34 @@ exports.postAceInit = function (hook, context) {
     // --- Mouseup Listener ---
     innerDoc.on('mouseup', function(evt) {
         if (isDragging) {
-            console.log('[ep_image_insert] resize mouseup');
             const finalX = evt.clientX;
             const deltaX = finalX - startX;
             let finalPixelWidth = startWidth + deltaX;
-            finalPixelWidth = Math.max(20, Math.round(finalPixelWidth));
+
+            if (targetOuterSpan) {
+                const $tableCell = $(targetOuterSpan).closest('td, th');
+                if ($tableCell.length > 0) {
+                    const parentWidth = $tableCell.width();
+                     if (parentWidth > 0) { // Ensure parentWidth is positive
+                        finalPixelWidth = Math.min(finalPixelWidth, parentWidth);
+                    }
+                }
+            }
+
+            finalPixelWidth = Math.max(20, Math.round(finalPixelWidth)); // Apply min width *after* parent constraint & rounding
             const widthToApply = `${finalPixelWidth}px`;
 
-            const finalPixelHeight = finalPixelWidth * aspectRatio;
-            const heightToApply = `${Math.round(finalPixelHeight)}px`;
+            const finalPixelHeight = Math.round(finalPixelWidth * currentVisualAspectRatioHW); // Use currentVisualAspectRatioHW
+            const heightToApplyPx = `${finalPixelHeight}px`; // For attribute storage
+            const newCssAspectRatioForVar = (startWidth > 0 && startHeight > 0) ? (startWidth / startHeight).toFixed(4) : '1'; // W/H for CSS var
 
             if (targetInnerSpan) {
-                console.log(`[ep_image_insert mouseup] Applying style W: ${widthToApply}, H: ${heightToApply} to targetInnerSpan`);
                 $(targetInnerSpan).css({
                     'width': widthToApply,
-                    'height': heightToApply
                 });
+                targetInnerSpan.style.removeProperty('height'); // Ensure no inline height style
+                targetInnerSpan.style.setProperty('--image-css-aspect-ratio', newCssAspectRatioForVar);
+
             } else {
                 console.error('[ep_image_insert mouseup] targetInnerSpan missing, cannot apply style!');
             }
@@ -441,7 +446,6 @@ exports.postAceInit = function (hook, context) {
                          const rangeStart = [lineNum, colStart + 1];
                          const rangeEnd = [lineNum, colStart + 2];
                          targetRange = [rangeStart, rangeEnd];
-                         console.log('[ep_image_insert mouseup] Calculated target range from data attributes:', targetRange);
                     } else {
                          console.error('[ep_image_insert mouseup] Invalid line/col data attributes:', lineStr, colStr);
                     }
@@ -451,13 +455,13 @@ exports.postAceInit = function (hook, context) {
             }
 
             if (targetRange) {
-                 console.log(`[ep_image_insert mouseup] Applying image-width=${widthToApply} AND image-height=${heightToApply} to range:`, targetRange);
                  _aceContext.callWithAce((ace) => {
                      ace.ace_performDocumentApplyAttributesToRange(targetRange[0], targetRange[1], [
                          ['image-width', widthToApply],
-                         ['image-height', heightToApply]
+                         ['image-height', heightToApplyPx], // Store calculated pixel height
+                         ['imageCssAspectRatio', newCssAspectRatioForVar] // Store W/H CSS aspect ratio
                      ]);
-                 }, 'applyImageWidthAttribute', true);
+                 }, 'applyImageAttributes', true); // Changed attribute name for clarity
             } else {
                  console.error('[ep_image_insert mouseup] Cannot apply attribute: Target range not found.');
             }
@@ -482,7 +486,6 @@ exports.postAceInit = function (hook, context) {
         const clipboardData = evt.originalEvent.clipboardData || window.clipboardData;
         if (!clipboardData) return;
 
-        console.log('[ep_image_insert] Paste event detected.');
         let foundImage = false;
 
         // Iterate through clipboard items
@@ -490,7 +493,6 @@ exports.postAceInit = function (hook, context) {
             const item = clipboardData.items[i];
             if (item.kind === 'file' && item.type.startsWith('image/')) {
                 const file = item.getAsFile();
-                console.log('[ep_image_insert] Pasted image file found:', file.name, file.type, file.size);
                 foundImage = true; 
 
                 // --- Validation (Simplified duplicate from toolbar.js) ---
@@ -526,7 +528,6 @@ exports.postAceInit = function (hook, context) {
 
                 if (isValid) {
                     evt.preventDefault(); // Prevent default paste ONLY if we handle a valid image
-                    console.log('[ep_image_insert] Pasted image is valid. Reading file...');
                     const reader = new FileReader();
                     reader.onload = (e_reader) => {
                         const data = e_reader.target.result;
@@ -534,7 +535,6 @@ exports.postAceInit = function (hook, context) {
                         img.onload = () => {
                             const widthPx = `${img.naturalWidth}px`;
                             const heightPx = `${img.naturalHeight}px`;
-                            console.log(`[ep_image_insert paste] Image loaded: ${widthPx} x ${heightPx}. Inserting...`);
                             _aceContext.callWithAce((ace) => {
                                 // Insert image at current cursor pos
                                 ace.ace_doInsertImage(data, widthPx, heightPx);
@@ -563,7 +563,6 @@ exports.postAceInit = function (hook, context) {
         if (foundImage) {
              // We already called preventDefault if the image was valid and handled
         } else {
-            console.log('[ep_image_insert] No image file found in paste data.');
             // Allow default paste for non-image content
         }
     });
@@ -575,8 +574,6 @@ exports.postAceInit = function (hook, context) {
              $inner.find('.inline-image.image-placeholder.selected').removeClass('selected');
         }
     });
-
-    console.log('[ep_image_insert postAceInit] Event listeners attached.');
 
   }, 'image_resize_listeners', true);
 };
@@ -605,7 +602,6 @@ function getAllPrevious(element) {
 */
 
 exports.aceEditorCSS = (hookName, context) => {
-  console.log(`[ep_image_insert aceEditorCSS] Adding CSS rules.`);
   // Return an array containing only the relative path(s) to actual CSS files.
   // CSS rules themselves should be inside these files.
   return [
@@ -618,12 +614,7 @@ exports.aceEditorCSS = (hookName, context) => {
 exports.aceRegisterBlockElements = () => ['img'];
 
 exports.aceCreateDomLine = (hookName, args, cb) => {
-  // Log entry point and initial arguments, ALWAYS log the input cls
-  console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] HOOK ENTRY. Input cls: "${args.cls}"`);
-
   if (args.cls && args.cls.indexOf('image:') >= 0) { // Added check for args.cls existence
-    console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] Found image class in: ${args.cls}`);
-    console.log('[ep_image_insert aceCreateDomLine] Full args for image line:', args); // ADDED LOGGING
     const clss = []; // Classes to keep
     let escapedSrc;
     const argClss = args.cls.split(' ');
@@ -638,8 +629,6 @@ exports.aceCreateDomLine = (hookName, args, cb) => {
         clss.push(cls);
       }
     }
-    // Log remaining classes after extracting image:
-    console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] Original classes kept: "${clss.join(' ')}". Extracted src: ${escapedSrc}`);
 
     // Add identifying classes for styling and placeholder identification
     clss.push('inline-image', 'character', 'image-placeholder');
@@ -656,117 +645,80 @@ exports.aceCreateDomLine = (hookName, args, cb) => {
       cls: clss.join(' '), // Pass modified classes back for the outer span
     };
 
-    // Log output modifier
-    console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] FINAL (placeholder): Output modifier:`, JSON.stringify(modifier));
     return cb([modifier]);
 
   } else {
-    // Log when the hook runs but doesn't find the image class
-    // console.log(`[ep_image_insert aceCreateDomLine L#${args.lineNumber}] Skipping: No image: prefix found in cls: "${args.cls}".`);
     return cb(); // Continue default processing if no image class found
   }
 };
 
 const Changeset = require('ep_etherpad-lite/static/js/Changeset');
 exports.acePostWriteDomLineHTML = (hookName, context) => {
-  // The line node is passed in context.node for this hook
   const lineNode = context.node; 
   if (!lineNode) {
-    console.log('[ep_image_insert acePostWriteDomLineHTML] No lineNode (context.node) found. Context:', context);
-    console.log('[ep_image_insert acePostWriteDomLineHTML] Exiting hook.');
     return; 
   }
 
-  console.log(`[ep_image_insert acePostWriteDomLineHTML] Running for lineNode:`, lineNode);
-
-  // Use querySelectorAll instead of jQuery find
   const placeholders = lineNode.querySelectorAll('span.image-placeholder');
-  console.log(`[ep_image_insert acePostWriteDomLineHTML] Found ${placeholders.length} placeholder spans using querySelectorAll.`);
 
   // Note: querySelectorAll returns a NodeList, not a jQuery object
   placeholders.forEach((placeholder, index) => { 
     const outerSpan = placeholder; // Clarity: this is the outer span
-    console.log(`[ep_image_insert acePostWriteDomLineHTML] Processing placeholder #${index}:`, outerSpan);
 
-    // Use plain JS for data attribute check if possible, or wrap with $ just for this
-    // Check on the inner span if it exists and has the var set
     const innerSpan = outerSpan.querySelector('span.image-inner');
     if (!innerSpan) {
-        console.warn(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} outer span found, but inner span.image-inner is missing.`);
         return; // Skip if inner span isn't there
-    }
-    if ($(innerSpan).data('css-var-set')) {
-        console.log(`[ep_image_insert acePostWriteDomLineHTML] CSS var already set for placeholder #${index}, skipping.`);
-        return;
     }
 
     let escapedSrc = null;
     let imageWidth = null; // Variable to store width
-    let imageHeight = null; // Variable to store height
-    const classes = outerSpan.className.split(' '); // Get classes from outer span
-    console.log(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} classes:`, classes);
+    let imageCssAspectRatioVal = null; // ADDED
+    const classes = outerSpan.className.split(' '); 
     for (const cls of classes) {
       if (cls.startsWith('image:')) {
         escapedSrc = cls.substring(6);
-        console.log(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} extracted escapedSrc.`);
-        // Don't break yet, might need width class
       } else if (cls.startsWith('image-width:')) {
         const widthValue = cls.substring(12);
         if (/\d+px$/.test(widthValue)) { // Validate format again
           imageWidth = widthValue;
-          console.log(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} extracted imageWidth: ${imageWidth}`);
         }
-      } else if (cls.startsWith('image-height:')) {
-        const heightValue = cls.substring(13);
-        if (/\d+px$/.test(heightValue)) { // Validate format again
-          imageHeight = heightValue;
-          console.log(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} extracted imageHeight: ${imageHeight}`);
-        }
+      } else if (cls.startsWith('imageCssAspectRatio:')) { // ADDED
+        imageCssAspectRatioVal = cls.substring(20);
       }
     }
 
     // Apply width style if found
     if (imageWidth) {
       innerSpan.style.width = imageWidth;
-      console.log(`[ep_image_insert acePostWriteDomLineHTML] Applied width style ${imageWidth} to inner span.`);
     } else {
       // Optional: Apply a default width if no attribute is set?
       // innerSpan.style.width = '100px'; // Example default
     }
 
-    // Apply height style if found
-    if (imageHeight) {
-      innerSpan.style.height = imageHeight;
-      console.log(`[ep_image_insert acePostWriteDomLineHTML] Applied height style ${imageHeight} to inner span.`);
+    // Apply CSS Aspect Ratio variable if found
+    if (imageCssAspectRatioVal) {
+      innerSpan.style.setProperty('--image-css-aspect-ratio', imageCssAspectRatioVal);
     } else {
-      // Optional: Apply a default height if no attribute is set?
-      // innerSpan.style.height = '50px'; // Example default
+      // Fallback or default aspect ratio if attribute is missing (e.g. for older content)
+      innerSpan.style.setProperty('--image-css-aspect-ratio', '1'); // Default to 1:1 (W/H)
     }
+    innerSpan.style.removeProperty('height'); // Ensure explicit height removed for aspect-ratio to work
 
     if (escapedSrc) {
       try {
         const src = decodeURIComponent(escapedSrc);
         if (src && (src.startsWith('data:') || src.startsWith('http') || src.startsWith('/'))) {
-          console.log(`[ep_image_insert acePostWriteDomLineHTML] Setting CSS var --image-src for placeholder #${index}`);
           // Set CSS custom property using plain JS on the INNER span
           innerSpan.style.setProperty('--image-src', `url("${src}")`);
-          // Mark as processed using jQuery data on the INNER span
-          $(innerSpan).data('css-var-set', true);
         } else {
-          console.warn(`[ep_image_insert acePostWriteDomLineHTML] Invalid unescaped src found for CSS var: ${src}`);
-          $(innerSpan).data('css-var-set', true); // Mark anyway
         }
       } catch (e) {
         console.error(`[ep_image_insert acePostWriteDomLineHTML] Error setting CSS var for placeholder #${index}:`, e);
-        $(innerSpan).data('css-var-set', true); // Mark anyway
       }
-  } else {
-      console.warn(`[ep_image_insert acePostWriteDomLineHTML] Placeholder #${index} found, but no image:* class with src.`);
-      $(innerSpan).data('css-var-set', true); // Mark anyway
-    }
+    } else {
+      }
   });
 
-  console.log(`[ep_image_insert acePostWriteDomLineHTML] Finished processing lineNode.`);
 };
 
 exports.aceAttribClasses = (hook, attr) => {
@@ -779,14 +731,12 @@ exports.aceAttribClasses = (hook, attr) => {
  * Hook to update attributes based on the final DOM state after content collection.
  */
 exports.collectContentPost = function(name, context) {
-  console.log(`[ep_image_insert collectContentPost ENTRY] tname: ${context.tname}, node classList: ${context.node ? context.node.classList : 'NO NODE'}`);
   const node = context.node;
   const state = context.state;
   const tname = context.tname;
 
   // Check if it's our INNER image span (REVERTED)
   if (tname === 'span' && node && node.classList && node.classList.contains('image-inner')) {
-    console.log('[ep_image_insert collectContentPost] Processing image-inner span (HOOK MAY NOT FIRE RELIABLY):', node);
 
     // Use the node directly as innerNode
     const innerNode = node;
@@ -795,51 +745,57 @@ exports.collectContentPost = function(name, context) {
     let heightPx = null;
 
     // --- Update image-width based on style ---
-    console.log(`[ep_image_insert collectContentPost] Reading innerNode.style.width: "${innerNode.style.width}"`);
     if (innerNode.style && innerNode.style.width) {
        const widthMatch = innerNode.style.width.match(/^(\d+)(?:px)?$/); // Extract number from width style (assume px)
        if (widthMatch && widthMatch[1]) {
            const widthVal = parseInt(widthMatch[1], 10);
            if (!isNaN(widthVal) && widthVal > 0) {
               widthPx = `${widthVal}px`;
-              console.log(`[ep_image_insert collectContentPost] Setting state.attributes.image-width = ${widthPx}`);
+              // Try to get offsetWidth for more accuracy if available and different
+              if (innerNode.offsetWidth && innerNode.offsetWidth !== widthVal) {
+                  widthPx = `${innerNode.offsetWidth}px`;
+              }
               state.attribs = state.attribs || {};
               state.attribs['image-width'] = widthPx;
            } else {
-             console.warn('[ep_image_insert collectContentPost] Parsed width is not a positive number.');
-             // Potentially remove existing attribute if style is invalid?
-             // delete state.attribs['image-width']; 
            }
        } else {
-           console.warn('[ep_image_insert collectContentPost] Could not parse pixel width from innerNode style:', innerNode.style.width);
        }
     } else {
-        console.warn('[ep_image_insert collectContentPost] innerNode style or style.width missing for width extraction.');
         // Remove attribute if style is missing?
         // if (state.attribs) delete state.attribs['image-width'];
     }
 
     // --- Update image-height based on style ---
-    console.log(`[ep_image_insert collectContentPost] Reading innerNode.style.height: "${innerNode.style.height}"`);
     if (innerNode.style && innerNode.style.height) {
        const heightMatch = innerNode.style.height.match(/^(\d+)(?:px)?$/); 
        if (heightMatch && heightMatch[1]) {
            const heightVal = parseInt(heightMatch[1], 10);
            if (!isNaN(heightVal) && heightVal > 0) {
               heightPx = `${heightVal}px`;
-              console.log(`[ep_image_insert collectContentPost] Setting state.attributes.image-height = ${heightPx}`);
               state.attribs = state.attribs || {};
               state.attribs['image-height'] = heightPx;
            } else {
-             console.warn('[ep_image_insert collectContentPost] Parsed height is not a positive number.');
-             // if (state.attribs) delete state.attribs['image-height']; 
            }
        } else {
-           console.warn('[ep_image_insert collectContentPost] Could not parse pixel height from innerNode style:', innerNode.style.height);
        }
     } else {
-        console.warn('[ep_image_insert collectContentPost] innerNode style or style.height missing for height extraction.');
-        // if (state.attribs) delete state.attribs['image-height'];
+    }
+
+    // Update imageCssAspectRatio attribute from computed style
+    // This ensures it reflects the visual aspect ratio preserved by resize, or natural on insert
+    const computedStyle = window.getComputedStyle(innerNode);
+    const cssAspectRatioFromVar = computedStyle.getPropertyValue('--image-css-aspect-ratio');
+    if (cssAspectRatioFromVar && cssAspectRatioFromVar.trim() !== '') {
+        state.attribs = state.attribs || {};
+        state.attribs['imageCssAspectRatio'] = cssAspectRatioFromVar.trim();
+    } else {
+        // Fallback: calculate from offsetWidth/offsetHeight if var somehow missing
+        if (innerNode.offsetWidth > 0 && innerNode.offsetHeight > 0) {
+            const calculatedCssAspectRatio = (innerNode.offsetWidth / innerNode.offsetHeight).toFixed(4);
+            state.attribs = state.attribs || {};
+            state.attribs['imageCssAspectRatio'] = calculatedCssAspectRatio;
+        }
     }
   }
 };
@@ -854,24 +810,8 @@ exports.aceKeyEvent = (hookName, context, cb) => {
   const currentColumn = rep.selStart[1]; // Cursor position BEFORE key press
   const key = evt.key;
 
-  // Log entry
-  console.log(`[ep_image_insert aceKeyEvent L#${lineNumber} C#${currentColumn}] Key: '${key}'`);
-
-  // Simplified check: Prevent typing immediately before the final ZWSP 
-  // if the character before that is the attributed NBSP? This might be too complex/
-  // brittle. Let's remove the prevention logic for now.
-
   return cb(false); // Let Etherpad handle other keys normally
 };
-
-// Add CSS during aceInitInnerdocbodyHead hook
-// ... (keep existing aceInitInnerdocbodyHead code) ...
-
-// exports.aceInitInnerdocbodyHead = aceInitInnerdocbodyHead; // Removed this line as function is undefined
-// exports.aceCreateDomLine = aceCreateDomLine; // Removed redundant export
-// exports.aceAttribsToClasses = aceAttribsToClasses; // Removed redundant export
-// exports.aceRegisterBlockElements = aceRegisterBlockElements; // Removed redundant export
-// exports.aceEditorCSS = aceEditorCSS; // Removed redundant export
 
 // *** ZWSP Image Insertion Logic ***
 const doInsertImage = function (src, widthPx, heightPx) {
@@ -903,15 +843,21 @@ const doInsertImage = function (src, widthPx, heightPx) {
   const attributesToSet = [['image', escapedSrc]];
   if (widthPx && /^\d+px$/.test(widthPx)) { // Validate format
       attributesToSet.push(['image-width', widthPx]);
-      console.log(`[ep_image_insert doInsertImage] Applying initial image-width: ${widthPx}`);
   }
   if (heightPx && /^\d+px$/.test(heightPx)) { // Validate format
       attributesToSet.push(['image-height', heightPx]);
-      console.log(`[ep_image_insert doInsertImage] Applying initial image-height: ${heightPx}`);
+  }
+  // ADDED: Add imageCssAspectRatio from natural dimensions
+  if (widthPx && heightPx) {
+    const naturalWidthNum = parseInt(widthPx, 10);
+    const naturalHeightNum = parseInt(heightPx, 10);
+    if (naturalWidthNum > 0 && naturalHeightNum > 0) {
+        const cssAspectRatio = (naturalWidthNum / naturalHeightNum).toFixed(4);
+        attributesToSet.push(['imageCssAspectRatio', cssAspectRatio]);
+    }
   }
 
   // 5. Apply the attributes
-  console.log(`[ep_image_insert doInsertImage] Applying attributes to range:`, imageAttrStart, imageAttrEnd, attributesToSet);
   docMan.setAttributesOnRange(imageAttrStart, imageAttrEnd, attributesToSet);
 };
 // *** End ZWSP Logic ***
