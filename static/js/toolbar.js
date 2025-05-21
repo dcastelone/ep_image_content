@@ -27,13 +27,13 @@ const _isValid = (file) => {
         const exists = mimeType.extensions.indexOf(fileType);
         if (exists > -1) {
           validMime = true;
+          break; // Found a valid type
         }
       }
     }
     if (validMime === false) {
       const errorMessage = html10n.get('ep_image_insert.error.fileType');
       $.gritter.add({ title: errorTitle, text: errorMessage, sticky: true, class_name: 'error' });
-
       return false;
     }
   }
@@ -42,10 +42,8 @@ const _isValid = (file) => {
     const allowedSize = (clientVars.ep_image_insert.maxFileSize / 1000000);
     const errorText = html10n.get('ep_image_insert.error.fileSize', { maxallowed: allowedSize });
     $.gritter.add({ title: errorTitle, text: errorText, sticky: true, class_name: 'error' });
-
     return false;
   }
-
   return true;
 };
 
@@ -93,74 +91,71 @@ exports.postToolbarInit = (hook, context) => {
     $(document).find('body').find('#imageInput').on('change', (e) => {
       const files = e.target.files;
       if (!files.length) {
-        return 'Please choose a file to upload first.';
+        // No specific user message needed here, browser handles it or no file selected is not an error
+        return;
       }
       const file = files[0];
 
       if (!_isValid(file)) {
-        return;
+        return; // Validation errors are handled by _isValid
       }
+
       if (clientVars.ep_image_insert.storageType === 'base64') {
-        $('#imageUploadModalLoader').removeClass('popup-show');
+        $('#imageUploadModalLoader').removeClass('popup-show'); // Ensure loader is hidden initially
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = () => {
           const data = reader.result;
-          // ---- Get Image Dimensions ----
           const img = new Image();
           img.onload = () => {
             const widthPx = `${img.naturalWidth}px`;
             const heightPx = `${img.naturalHeight}px`;
             context.ace.callWithAce((ace) => {
-              // Pass dimensions to doInsertImage (inserts at cursor)
-              ace.ace_doInsertImage(data, widthPx, heightPx); // REMOVED line number
+              ace.ace_doInsertImage(data, widthPx, heightPx);
             }, 'imgBase64', true);
           };
           img.onerror = () => {
              console.error('[ep_image_insert toolbar] Failed to load Base64 image data to get dimensions. Inserting without dimensions.');
              context.ace.callWithAce((ace) => {
-               ace.ace_doInsertImage(data); // REMOVED line number
+               ace.ace_doInsertImage(data);
             }, 'imgBase64Error', true);
           };
-          img.src = data; // Trigger load
-          // ---- End Get Image Dimensions ----
+          img.src = data;
+        };
+        reader.onerror = (error_evt) => { // Added error handling for FileReader
+            console.error('[ep_image_insert toolbar] FileReader error:', error_evt);
+            const errorTitle = html10n.get('ep_image_insert.error.title');
+            const errorMessage = html10n.get('ep_image_insert.error.fileRead'); // Generic file read error
+            $.gritter.add({ title: errorTitle, text: errorMessage, sticky: true, class_name: 'error' });
         };
       } else { // Upload storage type
         const formData = new FormData();
-
-        // add assoc key values, this will be posts values
         formData.append('file', file, file.name);
         $('#imageUploadModalLoader').addClass('popup-show');
         $.ajax({
           type: 'POST',
           url: `${clientVars.padId}/pluginfw/ep_image_insert/upload`,
-          xhr: () => {
-            const myXhr = $.ajaxSettings.xhr();
-
-            return myXhr;
-          },
-          success: (data) => { // data here is the URL of the uploaded image
+          xhr: () => $.ajaxSettings.xhr(), // Simplified XHR
+          success: (data) => {
             $('#imageUploadModalLoader').removeClass('popup-show');
-            // ---- Get Image Dimensions ----
             const img = new Image();
             img.onload = () => {
               const widthPx = `${img.naturalWidth}px`;
               const heightPx = `${img.naturalHeight}px`;
               context.ace.callWithAce((ace) => {
-                // Pass dimensions to doInsertImage (inserts at cursor)
-                ace.ace_doInsertImage(data, widthPx, heightPx); // REMOVED line number
+                ace.ace_doInsertImage(data, widthPx, heightPx);
               }, 'imgUpload', true);
             };
             img.onerror = () => {
                console.error(`[ep_image_insert toolbar] Failed to load uploaded image URL (${data}) to get dimensions. Inserting without dimensions.`);
                context.ace.callWithAce((ace) => {
-                 ace.ace_doInsertImage(data); // REMOVED line number
+                 ace.ace_doInsertImage(data);
               }, 'imgUploadError', true);
             };
-            img.src = data; // Trigger load using the URL
-            // ---- End Get Image Dimensions ----
+            img.src = data;
           },
           error: (error) => {
+            $('#imageUploadModalLoader').removeClass('popup-show'); // Ensure loader hidden on error
             let errorResponse;
             try {
               errorResponse = JSON.parse(error.responseText.trim());
@@ -168,11 +163,10 @@ exports.postToolbarInit = (hook, context) => {
                 errorResponse.message = `ep_image_insert.error.${errorResponse.type}`;
               }
             } catch (err) {
-              errorResponse = { message: error.responseText };
+              errorResponse = { message: error.responseText }; // Fallback to raw error
             }
             const errorTitle = html10n.get('ep_image_insert.error.title');
-            const errorText = html10n.get(errorResponse.message);
-
+            const errorText = html10n.get(errorResponse.message, {}, errorResponse.message); // Provide fallback for html10n
             $.gritter.add({ title: errorTitle, text: errorText, sticky: true, class_name: 'error' });
           },
           async: true,

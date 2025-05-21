@@ -1,9 +1,9 @@
 'use strict';
 
 const Changeset = require('ep_etherpad-lite/static/js/Changeset');
+const Security = require('ep_etherpad-lite/static/js/security');
 
 exports.getLineHTMLForExport = async (hook, context) => {
-  let lineContent = context.lineContent;
   const attribLine = context.attribLine;
   const apool = context.apool;
 
@@ -17,44 +17,66 @@ exports.getLineHTMLForExport = async (hook, context) => {
       const opChars = op.chars;
       const textSegment = context.text.substring(currentPos, currentPos + opChars);
 
-      let htmlSegment = Changeset.escapeText(textSegment); // Default: escaped text
+      let htmlSegment = Security.escapeHTML(textSegment); // Default: escaped text
 
       // Check for our image attribute
-      const imageAttribValue = Changeset.opAttributeValue(op, 'image', apool);
-      // Check if it's our placeholder NBSP
-      if (imageAttribValue && textSegment === '\u00a0') { 
+      const imageSrcAttrib = Changeset.opAttributeValue(op, 'image', apool);
+      const imageWidthAttrib = Changeset.opAttributeValue(op, 'image-width', apool);
+      const imageHeightAttrib = Changeset.opAttributeValue(op, 'image-height', apool);
+      // const imageAspectRatioAttrib = Changeset.opAttributeValue(op, 'imageCssAspectRatio', apool); // Not directly used for img tag but good to know it exists
+
+      if (imageSrcAttrib) {
         try {
-          // Value is the escaped src
-          const src = unescape(imageAttribValue);
-          if (src && (src.startsWith('data:') || src.startsWith('http') || src.startsWith('/'))) {
-            // Generate the img tag
-            let imgTag = `<img src="${Changeset.escapeText(src)}"`;
-            imgTag += ` style="display:inline-block; max-width:100%; vertical-align:middle;"`;
+          const decodedSrc = decodeURIComponent(imageSrcAttrib);
+          if (decodedSrc && (decodedSrc.startsWith('data:') || decodedSrc.startsWith('http') || decodedSrc.startsWith('/'))) {
+            let imgTag = `<img src="${Security.escapeHTML(decodedSrc)}"`;
+
+            let styles = 'display:inline-block; max-width:100%; height:auto;'; // Default styles
+
+            if (imageWidthAttrib) {
+              const widthValue = imageWidthAttrib.replace(/px$/, '');
+              imgTag += ` width="${Security.escapeHTMLAttribute(widthValue)}"`;
+              styles += ` width:${Security.escapeHTMLAttribute(imageWidthAttrib)};`;
+            }
+            if (imageHeightAttrib) {
+              const heightValue = imageHeightAttrib.replace(/px$/, '');
+              imgTag += ` height="${Security.escapeHTMLAttribute(heightValue)}"`;
+              // If height is set, override height:auto
+              styles = styles.replace('height:auto;', `height:${Security.escapeHTMLAttribute(imageHeightAttrib)};`);
+            }
+
+            imgTag += ` style="${styles}"`;
             imgTag += `>`;
-            htmlSegment = imgTag; // Replace placeholder NBSP with img tag
-            console.log(`[ep_image_insert exportHTML] Exported image: ${imgTag}`);
+            htmlSegment = imgTag;
           } else {
-             console.warn(`[ep_image_insert exportHTML] Invalid unescaped image src: ${src}`);
-             htmlSegment = '[Invalid Image Src]'; // Placeholder for error
+             console.warn(`[ep_image_insert exportHTML] Invalid unescaped image src: ${decodedSrc}`);
+             // Keep default htmlSegment (escaped placeholder text) or specific error
+             htmlSegment = '[Invalid Image Src]';
           }
         } catch (e) {
-          console.error(`[ep_image_insert exportHTML] Error unescaping image attribute: ${imageAttribValue}`, e);
-          htmlSegment = '[Image Decode Error]'; // Placeholder for error
+          console.error(`[ep_image_insert exportHTML] Error processing image attribute: ${imageSrcAttrib}`, e);
+          htmlSegment = '[Image Processing Error]';
         }
-      } else {
-         // TODO: Handle other attributes (bold, italic, etc.) if needed for proper export
-         // This part remains basic, only handling the image replacement.
       }
+      // Note: This part does not explicitly handle other formatting attributes (bold, italic)
+      // on the image placeholder itself. Typically, images are standalone and don't carry
+      // such text formatting. If the placeholder character was part of a larger formatted
+      // text run, Etherpad's core export logic should handle closing/reopening tags around this segment.
 
       generatedHTML += htmlSegment;
       currentPos += opChars;
     }
     context.lineContent = generatedHTML;
   } else {
-     context.lineContent = Changeset.escapeText(context.text);
+     // Line has no attributes, just escape the text
+     context.lineContent = Security.escapeHTML(context.text);
   }
+  // Ensure cb() is not called if we are modifying context.lineContent directly.
+  // The hook expects a Promise or direct modification.
 };
 
 exports.stylesForExport = (hook, padId, cb) => {
-  cb('img { display:inline-block; max-width:100%; vertical-align:middle; }');
+  // We're now using inline styles plus width/height attributes for the img tag.
+  // A general max-width might still be useful for older clients or specific scenarios.
+  cb('img { max-width: 100%; vertical-align: middle; }');
 };

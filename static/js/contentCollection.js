@@ -2,7 +2,6 @@
 
 // This hook is called **before** the text of a line/segment is processed by the Changeset library.
 const collectContentPre = (hook, context) => {
-  // Extract image src, width, height, and aspect ratio from class list
   const classes = context.cls ? context.cls.split(' ') : [];
   let escapedSrc = null;
   let widthValue = null;
@@ -14,28 +13,24 @@ const collectContentPre = (hook, context) => {
           escapedSrc = cls.substring(6);
       } else if (cls.startsWith('image-width:')) {
           const potentialWidth = cls.substring(12);
-          if (/\d+px$/.test(potentialWidth)) { // Validate format
+          if (/\d+px$/.test(potentialWidth)) {
              widthValue = potentialWidth;
           }
       } else if (cls.startsWith('image-height:')) {
           const potentialHeight = cls.substring(13);
-          if (/\d+px$/.test(potentialHeight)) { // Validate format
+          if (/\d+px$/.test(potentialHeight)) {
              heightValue = potentialHeight;
           }
       } else if (cls.startsWith('imageCssAspectRatio:')) {
-          // Expects a floating point number, e.g., "1.5" or "0.75"
           const potentialAspectRatio = cls.substring(20);
-          if (!isNaN(parseFloat(potentialAspectRatio))) { // Validate format (is a number)
+          if (!isNaN(parseFloat(potentialAspectRatio))) {
             aspectRatioValue = potentialAspectRatio;
           }
       }
   }
 
-  // Re-apply attributes if found
   if (escapedSrc) {
     try {
-      // Re-apply the 'image' attribute with its escaped value
-      // Etherpad uses 'key::value' format for attributes with values in doAttrib
       context.cc.doAttrib(context.state, `image::${escapedSrc}`);
     } catch (e) {
       console.error('[ep_image_insert collectContentPre] Error applying image attribute:', e);
