@@ -26,7 +26,9 @@
         "padRemove": "ep_image_insert/index",
         "eejsBlock_styles": "ep_image_insert/index",
         "eejsBlock_timesliderStyles": "ep_image_insert/index",
-        "import": "ep_image_insert/index"
+        "import": "ep_image_insert/index",
+        "collectContentPre": "ep_image_insert/static/js/contentCollection",
+        "ccRegisterBlockElements": "ep_image_insert/index"
       }
     }
   ]

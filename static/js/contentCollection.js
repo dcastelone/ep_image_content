@@ -13,12 +13,12 @@ const collectContentPre = (hook, context) => {
           escapedSrc = cls.substring(6);
       } else if (cls.startsWith('image-width:')) {
           const potentialWidth = cls.substring(12);
-          if (/\d+px$/.test(potentialWidth)) {
+          if (potentialWidth && (potentialWidth === 'auto' || /[0-9]+(%|px|em|rem|vw|vh)?$/.test(potentialWidth) || /^[0-9.]+$/.test(potentialWidth))) {
              widthValue = potentialWidth;
           }
       } else if (cls.startsWith('image-height:')) {
           const potentialHeight = cls.substring(13);
-          if (/\d+px$/.test(potentialHeight)) {
+          if (potentialHeight && (potentialHeight === 'auto' || /[0-9]+(%|px|em|rem|vw|vh)?$/.test(potentialHeight) || /^[0-9.]+$/.test(potentialHeight))) {
              heightValue = potentialHeight;
           }
       } else if (cls.startsWith('imageCssAspectRatio:')) {
