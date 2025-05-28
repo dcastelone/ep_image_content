@@ -69,7 +69,9 @@ exports.eejsBlock_timesliderStyles = (hookName, args, cb) => {
 
 exports.eejsBlock_body = (hookName, args, cb) => {
   const modal = eejs.require('ep_image_insert/templates/modal.ejs');
+  const imageFormatMenu = eejs.require('ep_image_insert/templates/imageFormatMenu.ejs');
   args.content += modal;
+  args.content += imageFormatMenu;
 
   return cb();
 };
@@ -252,6 +254,9 @@ exports.import = async (hookName, context) => {
           if (!isNaN(numWidth) && numWidth > 0 && !isNaN(numHeight) && numHeight > 0) {
             outerClasses += ` imageCssAspectRatio:${(numWidth / numHeight).toFixed(4)}`;
           }
+          const imageId = uuid.v4();
+          outerClasses += ` image-id:${imageId}`;
+
           outerSpan.className = outerClasses.trim();
 
           const fragment = document.createDocumentFragment();

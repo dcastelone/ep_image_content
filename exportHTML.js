@@ -23,6 +23,7 @@ exports.getLineHTMLForExport = async (hook, context) => {
       const imageSrcAttrib = Changeset.opAttributeValue(op, 'image', apool);
       const imageWidthAttrib = Changeset.opAttributeValue(op, 'image-width', apool);
       const imageHeightAttrib = Changeset.opAttributeValue(op, 'image-height', apool);
+      const imageIdAttrib = Changeset.opAttributeValue(op, 'image-id', apool);
       // const imageAspectRatioAttrib = Changeset.opAttributeValue(op, 'imageCssAspectRatio', apool); // Not directly used for img tag but good to know it exists
 
       if (imageSrcAttrib) {
@@ -43,6 +44,10 @@ exports.getLineHTMLForExport = async (hook, context) => {
               imgTag += ` height="${Security.escapeHTMLAttribute(heightValue)}"`;
               // If height is set, override height:auto
               styles = styles.replace('height:auto;', `height:${Security.escapeHTMLAttribute(imageHeightAttrib)};`);
+            }
+
+            if (imageIdAttrib) {
+              imgTag += ` data-image-id="${Security.escapeHTMLAttribute(imageIdAttrib)}"`;
             }
 
             imgTag += ` style="${styles}"`;

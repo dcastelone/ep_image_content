@@ -7,6 +7,8 @@ const collectContentPre = (hook, context) => {
   let widthValue = null;
   let heightValue = null;
   let aspectRatioValue = null;
+  let floatValue = null;
+  let imageIdValue = null;
 
   for (const cls of classes) {
       if (cls.startsWith('image:')) {
@@ -25,6 +27,16 @@ const collectContentPre = (hook, context) => {
           const potentialAspectRatio = cls.substring(20);
           if (!isNaN(parseFloat(potentialAspectRatio))) {
             aspectRatioValue = potentialAspectRatio;
+          }
+      } else if (cls.startsWith('image-float:')) {
+          const potentialFloat = cls.substring(12);
+          if (potentialFloat && ['none', 'left', 'right', 'inline'].includes(potentialFloat)) {
+            floatValue = potentialFloat;
+          }
+      } else if (cls.startsWith('image-id-')) {
+          const potentialId = cls.substring(9);
+          if (potentialId && potentialId.length > 10) {
+            imageIdValue = potentialId;
           }
       }
   }
@@ -55,6 +67,20 @@ const collectContentPre = (hook, context) => {
         context.cc.doAttrib(context.state, `imageCssAspectRatio::${aspectRatioValue}`);
     } catch (e) {
         console.error('[ep_image_insert collectContentPre] Error applying imageCssAspectRatio attribute:', e);
+    }
+  }
+  if (floatValue) {
+    try {
+        context.cc.doAttrib(context.state, `image-float::${floatValue}`);
+    } catch (e) {
+        console.error('[ep_image_insert collectContentPre] Error applying image-float attribute:', e);
+    }
+  }
+  if (imageIdValue) {
+    try {
+        context.cc.doAttrib(context.state, `image-id::${imageIdValue}`);
+    } catch (e) {
+        console.error('[ep_image_insert collectContentPre] Error applying image-id attribute:', e);
     }
   }
 };
