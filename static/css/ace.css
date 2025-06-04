@@ -100,16 +100,21 @@ span.inline-image.image-placeholder span.image-resize-handle {
   cursor: nw-resize; /* Double-sided diagonal arrow */
 }
 
-/* Show handles only when image is selected (clicked) */
-span.inline-image.image-placeholder.currently-selected span.image-resize-handle {
-  display: block;
+/* Selection styling is handled via dynamic CSS injection in JavaScript */
+/* This completely avoids triggering content collection hooks */
+
+/* Default state - all images unselected */
+span.inline-image.image-placeholder span.image-inner {
+  outline: 0;
+  outline-offset: 0;
 }
 
-/* Add visual feedback for selected images */
-span.inline-image.image-placeholder.currently-selected span.image-inner {
-  outline: 1px solid #1a73e8;
-  outline-offset: 1px;
+span.inline-image.image-placeholder span.image-resize-handle {
+  display: none;
 }
+
+/* Dynamic CSS rules are injected into the document head to show selection */
+/* Format: span.inline-image.image-placeholder[data-image-id="ID"] span.image-inner { outline: ... } */
 
 /* Image formatting menu */
 .image-format-menu {

@@ -278,6 +278,9 @@ exports.postAceInit = function (hook, context) {
     
     // NEW: Store the active image's unique ID
     window.epImageInsertActiveImageId = null;
+    
+    // Store resize positioning data without DOM attributes to avoid triggering content collection
+    let resizePositionData = null;
 
     // Function to position and show the format menu below the selected image
     const showFormatMenu = (imageElement) => {
@@ -396,23 +399,96 @@ exports.postAceInit = function (hook, context) {
             return;
         }
         
+        // *** ENHANCED DEBUG: Track image click within table context ***
+        console.log('[ep_image_insert] *** IMAGE MOUSEDOWN EVENT START ***');
+        console.log('[ep_image_insert] Event target:', evt.target);
+        console.log('[ep_image_insert] Event currentTarget:', evt.currentTarget);
+        
         targetOuterSpan = this;
         const $targetOuterSpan = $(targetOuterSpan);
+        console.log('[ep_image_insert] Target outer span element:', targetOuterSpan);
+        console.log('[ep_image_insert] Target outer span classes:', targetOuterSpan.className);
+        console.log('[ep_image_insert] Target outer span HTML length:', targetOuterSpan.outerHTML?.length || 0);
+
+        // *** DEBUG: Check table context ***
+        const closestTable = targetOuterSpan.closest('table.dataTable');
+        const closestTableCell = targetOuterSpan.closest('td, th');
+        const closestAceLine = targetOuterSpan.closest('.ace-line');
+        
+        console.log('[ep_image_insert] Is image within table?', !!closestTable);
+        if (closestTable) {
+            console.log('[ep_image_insert] Table tblId:', closestTable.getAttribute('data-tblId'));
+            console.log('[ep_image_insert] Table row:', closestTable.getAttribute('data-row'));
+            console.log('[ep_image_insert] Table cell:', !!closestTableCell);
+            if (closestTableCell) {
+                console.log('[ep_image_insert] Cell data-column:', closestTableCell.getAttribute('data-column'));
+                console.log('[ep_image_insert] Cell innerHTML length:', closestTableCell.innerHTML?.length || 0);
+            }
+        }
+        if (closestAceLine) {
+            console.log('[ep_image_insert] Ace line ID:', closestAceLine.id);
+            console.log('[ep_image_insert] Ace line classes:', closestAceLine.className);
+            console.log('[ep_image_insert] Ace line innerHTML length:', closestAceLine.innerHTML?.length || 0);
+        }
 
         const imageId = $targetOuterSpan.attr('data-image-id');
+        console.log('[ep_image_insert] Image ID:', imageId);
         
         if (imageId) {
             const previouslyActiveId = window.epImageInsertActiveImageId;
+            console.log('[ep_image_insert] Previously active image ID:', previouslyActiveId);
+            console.log('[ep_image_insert] Setting new active image ID:', imageId);
+            
             window.epImageInsertActiveImageId = imageId; // NEW: Set active ID
 
-            // Manually update selection classes if ID changed
+            // *** DEBUG: Track selection styling changes ***
+            console.log('[ep_image_insert] *** SELECTION STYLING START ***');
+            
+            // Use dynamic CSS injection to avoid triggering content collector on image elements
             if (previouslyActiveId !== imageId) {
-                if (previouslyActiveId) {
-                    const $prevActive = $inner.find(`.inline-image.image-placeholder[data-image-id="${previouslyActiveId}"]`);
-                    if ($prevActive.length) $prevActive.removeClass('currently-selected');
+                console.log('[ep_image_insert] Updating dynamic CSS selection');
+                const innerDoc = $inner[0].ownerDocument;
+                
+                // Remove previous dynamic style if it exists
+                let existingStyle = innerDoc.getElementById('ep-image-selection-style');
+                if (existingStyle) {
+                    existingStyle.remove();
                 }
-                $targetOuterSpan.addClass('currently-selected');
-            } // If same image clicked again, it remains selected, no class change needed here.
+                
+                // Create new dynamic style element for the selected image
+                if (imageId) {
+                    const styleElement = innerDoc.createElement('style');
+                    styleElement.id = 'ep-image-selection-style';
+                    styleElement.textContent = `
+                        span.inline-image.image-placeholder[data-image-id="${imageId}"] span.image-inner {
+                            outline: 1px solid #1a73e8 !important;
+                            outline-offset: 1px !important;
+                        }
+                        span.inline-image.image-placeholder[data-image-id="${imageId}"] span.image-resize-handle {
+                            display: block !important;
+                        }
+                    `;
+                    innerDoc.head.appendChild(styleElement);
+                    console.log('[ep_image_insert] Added dynamic CSS for image:', imageId);
+                }
+            }
+            
+            console.log('[ep_image_insert] *** SELECTION STYLING END ***');
+            
+            // *** DEBUG: Check DOM state after style changes ***
+            if (closestAceLine) {
+                console.log('[ep_image_insert] *** DOM STATE AFTER STYLE CHANGES ***');
+                console.log('[ep_image_insert] Ace line innerHTML length after style changes:', closestAceLine.innerHTML?.length || 0);
+                console.log('[ep_image_insert] Ace line innerHTML (first 500 chars):', closestAceLine.innerHTML?.substring(0, 500) || '');
+                
+                // Check for delimiter presence in the line
+                const delimiterCount = (closestAceLine.innerHTML || '').split('|').length - 1;
+                console.log('[ep_image_insert] Delimiter count in ace line after style changes:', delimiterCount);
+                
+                // Check if tbljson class is still present
+                const hasTbljsonClass = closestAceLine.innerHTML?.includes('tbljson-') || false;
+                console.log('[ep_image_insert] Ace line still has tbljson class after changes:', hasTbljsonClass);
+            }
             
             showFormatMenu(targetOuterSpan);
         } else {
@@ -429,9 +505,11 @@ exports.postAceInit = function (hook, context) {
 
         const target = $(evt.target);
         const isResizeHandle = target.hasClass('image-resize-handle');
+        console.log('[ep_image_insert] Is resize handle clicked?', isResizeHandle);
 
         // If clicking on a resize handle, start the resize operation
         if (isResizeHandle) {
+            console.log('[ep_image_insert] *** RESIZE HANDLE CLICKED - STARTING RESIZE OPERATION ***');
             isDragging = true;
             outlineBoxPositioned = false;
             startX = evt.clientX;
@@ -453,19 +531,20 @@ exports.postAceInit = function (hook, context) {
                 if (imageIndex === -1) {
                     console.error('[ep_image_insert mousedown] Clicked image placeholder not found within its line DOM elements.');
                     isDragging = false;
+                    resizePositionData = null;
                     $targetOuterSpan.removeClass('selected');
                     targetOuterSpan = null;
                     return;
                 }
 
                 targetLineNumber = _getLineNumberOfElement(lineElement);
-                $(targetOuterSpan).attr('data-line', targetLineNumber);
-
+                
+                // Store positioning data in JavaScript variable instead of DOM attributes to avoid content collection
                 _aceContext.callWithAce((ace) => {
                     const rep = ace.ace_getRep();
                     if (!rep.lines.atIndex(targetLineNumber)) {
                         console.error(`[ep_image_insert mousedown] Line ${targetLineNumber} does not exist in rep.`);
-                        $(targetOuterSpan).removeAttr('data-col');
+                        resizePositionData = null;
                         return;
                     }
                     const lineText = rep.lines.atIndex(targetLineNumber).text;
@@ -474,26 +553,34 @@ exports.postAceInit = function (hook, context) {
                     const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex);
                     
                     if (placeholderInfo) {
-                        $(targetOuterSpan).attr('data-col', placeholderInfo.colStart);
-                        $(targetOuterSpan).attr('data-pattern-length', placeholderInfo.patternLength);
+                        // Store in JS variable instead of DOM attributes to avoid triggering content collection
+                        resizePositionData = {
+                            lineNumber: targetLineNumber,
+                            colStart: placeholderInfo.colStart,
+                            patternLength: placeholderInfo.patternLength
+                        };
                         console.log(`[ep_image_insert mousedown] Found placeholder at position ${placeholderInfo.colStart} with pattern length ${placeholderInfo.patternLength}`);
                     } else {
                         console.error(`[ep_image_insert mousedown] Could not find any placeholder sequence for image index ${imageIndex} in line text: "${lineText}"`);
-                        $(targetOuterSpan).removeAttr('data-col');
+                        resizePositionData = null;
                     }
                 }, 'getImageColStart', true);
             } else {
                 console.error('[ep_image_insert mousedown] Could not find parent .ace-line for the clicked image.');
                 isDragging = false;
+                resizePositionData = null;
                 $targetOuterSpan.removeClass('selected');
                 targetOuterSpan = null;
                 return;
             }
             evt.preventDefault();
         } else {
+            console.log('[ep_image_insert] *** SIMPLE IMAGE CLICK - NO RESIZE HANDLE ***');
             // Just clicking on the image (not a handle) - image is already selected above
             // No need to prevent default, allow normal text cursor behavior
         }
+        
+        console.log('[ep_image_insert] *** IMAGE MOUSEDOWN EVENT END ***');
     });
 
     innerDoc.on('mousemove', function(evt) {
@@ -607,40 +694,24 @@ exports.postAceInit = function (hook, context) {
             const heightToApplyPx = `${finalPixelHeight}px`;
             const newCssAspectRatioForVar = (startWidth > 0 && startHeight > 0) ? (startWidth / startHeight).toFixed(4) : '1';
 
-            if (targetInnerSpan) {
-                $(targetInnerSpan).css({
-                    'width': widthToApply,
-                });
-                targetInnerSpan.style.removeProperty('height');
-                targetInnerSpan.style.setProperty('--image-css-aspect-ratio', newCssAspectRatioForVar);
-            } else {
-                console.error('[ep_image_insert mouseup] targetInnerSpan missing, cannot apply style!');
-            }
+            // Don't apply styles directly to avoid triggering content collector
+            // The visual updates will be handled by acePostWriteDomLineHTML after attributes are applied
+            console.log('[ep_image_insert mouseup] Skipping direct style application to avoid content collection triggers');
 
             let targetRange = null;
-            if (targetOuterSpan) {
-                const lineStr = $(targetOuterSpan).attr('data-line');
-                const colStr = $(targetOuterSpan).attr('data-col');
-                const patternLengthStr = $(targetOuterSpan).attr('data-pattern-length');
+            if (resizePositionData) {
+                const lineNum = resizePositionData.lineNumber;
+                const colStart = resizePositionData.colStart;
+                const patternLength = resizePositionData.patternLength;
                 
-                if (lineStr !== undefined && colStr !== undefined && patternLengthStr !== undefined) {
-                    const lineNum = parseInt(lineStr, 10);
-                    const colStart = parseInt(colStr, 10);
-                    const patternLength = parseInt(patternLengthStr, 10);
-                    
-                    if (!isNaN(lineNum) && !isNaN(colStart) && !isNaN(patternLength)) {
-                         // For attributes, we target the middle character of the placeholder pattern
-                         const rangeStart = [lineNum, colStart + Math.floor(patternLength / 2)];
-                         const rangeEnd = [lineNum, colStart + Math.floor(patternLength / 2) + 1];
-                         targetRange = [rangeStart, rangeEnd];
-                         
-                         console.log(`[ep_image_insert mouseup] Using range [${rangeStart}] to [${rangeEnd}] for pattern length ${patternLength}`);
-                    } else {
-                         console.error('[ep_image_insert mouseup] Invalid line/col/pattern data attributes:', lineStr, colStr, patternLengthStr);
-                    }
-                } else {
-                     console.error('[ep_image_insert mouseup] Missing line/col/pattern data attributes.');
-                }
+                // For attributes, we target the middle character of the placeholder pattern
+                const rangeStart = [lineNum, colStart + Math.floor(patternLength / 2)];
+                const rangeEnd = [lineNum, colStart + Math.floor(patternLength / 2) + 1];
+                targetRange = [rangeStart, rangeEnd];
+                
+                console.log(`[ep_image_insert mouseup] Using range [${rangeStart}] to [${rangeEnd}] for pattern length ${patternLength}`);
+            } else {
+                console.error('[ep_image_insert mouseup] Missing resize position data.');
             }
 
             if (targetRange) {
@@ -682,10 +753,8 @@ exports.postAceInit = function (hook, context) {
             $inner.css('cursor', 'auto');
             
             // Keep the image selected after resizing - don't clear selection
-            // Clean up data attributes but keep the image selected
-            if (targetOuterSpan) {
-                $(targetOuterSpan).removeAttr('data-line').removeAttr('data-col').removeAttr('data-pattern-length');
-            }
+            // Clean up resize position data
+            resizePositionData = null;
             
             // Reset target references
             targetOuterSpan = null;
@@ -771,8 +840,14 @@ exports.postAceInit = function (hook, context) {
             if (window.epImageInsertActiveImageId) {
                 const previouslyActiveId = window.epImageInsertActiveImageId;
                 window.epImageInsertActiveImageId = null;
-                const $prevActive = $inner.find(`.inline-image.image-placeholder[data-image-id="${previouslyActiveId}"]`);
-                if ($prevActive.length) $prevActive.removeClass('currently-selected');
+                // Remove dynamic CSS selection
+                const innerDoc = $inner[0].ownerDocument;
+                const existingStyle = innerDoc.getElementById('ep-image-selection-style');
+                if (existingStyle) {
+                    existingStyle.remove();
+                }
+                // Clean up any pending resize position data
+                resizePositionData = null;
                 // _aceContext.callWithAce((ace) => {
                 //    ace.ace_callRepaint(); // Repaint might not be enough, direct class removal is better.
                 // }, 'repaintAfterDeselect', true);
@@ -787,8 +862,14 @@ exports.postAceInit = function (hook, context) {
             if (window.epImageInsertActiveImageId) {
                 const previouslyActiveId = window.epImageInsertActiveImageId;
                 window.epImageInsertActiveImageId = null;
-                const $prevActive = $inner.find(`.inline-image.image-placeholder[data-image-id="${previouslyActiveId}"]`);
-                if ($prevActive.length) $prevActive.removeClass('currently-selected');
+                // Remove dynamic CSS selection
+                const innerDoc = $inner[0].ownerDocument;
+                const existingStyle = innerDoc.getElementById('ep-image-selection-style');
+                if (existingStyle) {
+                    existingStyle.remove();
+                }
+                // Clean up any pending resize position data
+                resizePositionData = null;
                 // _aceContext.callWithAce((ace) => {
                 //    ace.ace_callRepaint();
                 // }, 'repaintAfterDeselectEscape', true);
@@ -1271,6 +1352,7 @@ exports.acePostWriteDomLineHTML = (hookName, context) => {
     
     const currentDataImageId = outerSpan.getAttribute('data-image-id');
 
+    // acePostWriteDomLineHTML is part of the rendering pipeline, so inline styles should be safe here
     if (imageWidth) {
       innerSpan.style.width = imageWidth;
     } // else { /* Optional: Apply a default width? */ }
@@ -1313,13 +1395,8 @@ exports.acePostWriteDomLineHTML = (hookName, context) => {
       outerSpan.classList.add('image-float-none');
     }
     
-    // Check if this image should be selected using the active ID
-    if (typeof window !== 'undefined' && window.epImageInsertActiveImageId && currentDataImageId &&
-        currentDataImageId === window.epImageInsertActiveImageId) {
-      outerSpan.classList.add('currently-selected');
-    } else {
-      outerSpan.classList.remove('currently-selected');
-    }
+    // Selection styling is now handled purely via CSS using CSS custom property
+    // No DOM modifications needed here to avoid triggering content collection
 
     // Remove the old data-image-unique-id if it exists from previous versions
     if (outerSpan.hasAttribute('data-image-unique-id')) {
