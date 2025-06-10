@@ -11,7 +11,7 @@ function generateUUID() {
 }
 
 // Helper function to find image placeholder position robustly
-function findImagePlaceholderPosition(lineText, imageIndex) {
+function findImagePlaceholderPosition(lineText, imageIndex, fallbackLineElement = null) {
   // Try different placeholder patterns that might exist
   const placeholderPatterns = [
     '\u200B\u200B\u200B', // 3 zero-width spaces (current)
@@ -56,6 +56,54 @@ function findImagePlaceholderPosition(lineText, imageIndex) {
         colStart: i,
         patternLength: 1,
         pattern: zwspPattern
+      };
+    }
+  }
+  
+  // DOM-based fallback: when text-based approach fails, use DOM positioning
+  if (fallbackLineElement) {
+    console.log(`[ep_image_insert] DOM fallback: Using DOM-based positioning for image index ${imageIndex}`);
+    
+    // Count characters before the target image element in the DOM
+    const allImagePlaceholders = Array.from(fallbackLineElement.querySelectorAll('.inline-image.image-placeholder'));
+    if (imageIndex < allImagePlaceholders.length) {
+      const targetImageElement = allImagePlaceholders[imageIndex];
+      
+      // Calculate approximate text position by walking through DOM text nodes
+      let approximatePosition = 0;
+      const walker = document.createTreeWalker(
+        fallbackLineElement,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+      );
+      
+      let currentNode = walker.nextNode();
+      while (currentNode) {
+        if (currentNode.parentNode && 
+            (currentNode.parentNode === targetImageElement || 
+             targetImageElement.contains(currentNode.parentNode))) {
+          // Found a text node that belongs to our target image
+          console.log(`[ep_image_insert] DOM fallback: Found position ${approximatePosition} for image index ${imageIndex}`);
+          return {
+            colStart: approximatePosition,
+            patternLength: 3, // Assume 3 characters for safety
+            pattern: '\u200B\u200B\u200B',
+            isDomFallback: true
+          };
+        }
+        // Add the length of this text node to our position counter
+        approximatePosition += currentNode.textContent.length;
+        currentNode = walker.nextNode();
+      }
+      
+      // If we couldn't find the exact position, use a reasonable estimate
+      console.log(`[ep_image_insert] DOM fallback: Using estimated position ${approximatePosition} for image index ${imageIndex}`);
+      return {
+        colStart: Math.max(0, approximatePosition - 1),
+        patternLength: 3,
+        pattern: '\u200B\u200B\u200B',
+        isDomFallback: true
       };
     }
   }
@@ -550,7 +598,7 @@ exports.postAceInit = function (hook, context) {
                     const lineText = rep.lines.atIndex(targetLineNumber).text;
                     
                     // Use helper function to find placeholder position
-                    const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex);
+                    const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex, lineElement);
                     
                     if (placeholderInfo) {
                         // Store in JS variable instead of DOM attributes to avoid triggering content collection
@@ -574,10 +622,43 @@ exports.postAceInit = function (hook, context) {
                 return;
             }
             evt.preventDefault();
-        } else {
+          } else {
             console.log('[ep_image_insert] *** SIMPLE IMAGE CLICK - NO RESIZE HANDLE ***');
-            // Just clicking on the image (not a handle) - image is already selected above
-            // No need to prevent default, allow normal text cursor behavior
+            // Position cursor next to the image instead of inside it
+            _aceContext.callWithAce((ace) => {
+                const lineElement = $(targetOuterSpan).closest('.ace-line')[0];
+                if (lineElement) {
+                    const lineNumber = _getLineNumberOfElement(lineElement);
+                    const rep = ace.ace_getRep();
+                    if (rep.lines.atIndex(lineNumber)) {
+                        const lineText = rep.lines.atIndex(lineNumber).text;
+                        const allImages = Array.from(lineElement.querySelectorAll('.inline-image.image-placeholder'));
+                        const imageIndex = allImages.indexOf(targetOuterSpan);
+                        
+                        if (imageIndex !== -1) {
+                            const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex, lineElement);
+                            if (placeholderInfo) {
+                                // Determine cursor position based on click location relative to image
+                                const imageRect = targetInnerSpan.getBoundingClientRect();
+                                const clickX = evt.clientX;
+                                const imageCenterX = imageRect.left + imageRect.width / 2;
+                                
+                                let cursorPos;
+                                if (clickX < imageCenterX) {
+                                    // Clicked left side - place cursor before image
+                                    cursorPos = [lineNumber, placeholderInfo.colStart];
+                                } else {
+                                    // Clicked right side - place cursor after image
+                                    cursorPos = [lineNumber, placeholderInfo.colStart + placeholderInfo.patternLength];
+                                }
+                                
+                                console.log(`[ep_image_insert] Positioning cursor at [${cursorPos}] based on click position`);
+                                ace.ace_performSelectionChange(cursorPos, cursorPos, false);
+                            }
+                        }
+                    }
+                }
+            }, 'positionCursorNextToImage', true);
         }
         
         console.log('[ep_image_insert] *** IMAGE MOUSEDOWN EVENT END ***');
@@ -1045,7 +1126,7 @@ exports.postAceInit = function (hook, context) {
                             const lineText = rep.lines.atIndex(targetLineNumber).text;
                             
                             // Use helper function to find placeholder position
-                            const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex);
+                            const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex, lineElement);
 
                             if (placeholderInfo) {
                                 // Calculate the range to delete: the entire placeholder pattern
@@ -1152,7 +1233,7 @@ exports.postAceInit = function (hook, context) {
                             const lineText = rep.lines.atIndex(targetLineNumber).text;
                             
                             // Use helper function to find placeholder position
-                            const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex);
+                            const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex, lineElement);
 
                             if (placeholderInfo) {
                                 // For attributes, we target the middle character of the placeholder pattern
@@ -1217,7 +1298,7 @@ exports.postAceInit = function (hook, context) {
                                 const lineText = rep.lines.atIndex(targetLineNumber).text;
                                 
                                 // Use helper function to find placeholder position
-                                const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex);
+                                const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex, lineElement);
 
                                 if (placeholderInfo) {
                                     // Calculate the range to delete: the entire placeholder pattern
@@ -1291,7 +1372,7 @@ exports.aceCreateDomLine = (hookName, args, cb) => {
     }
     clss.push('inline-image', 'character', 'image-placeholder');
     const handleHtml = 
-      '<span class="image-resize-handle br"></span>';
+      '<span class="image-resize-handle br" contenteditable="false"></span>';
     
     // The 'cls' in the modifier will be applied to the *outermost* span ACE creates for the line segment.
     // We will add data-image-id to this span in acePostWriteDomLineHTML.

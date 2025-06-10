@@ -1,4 +1,3 @@
-/* Version: 2024-01-15-v5 - Fixed positioning and debugging */
 
 /* Import Bootstrap Icons if not already available */
 @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css');
@@ -70,6 +69,16 @@ span.inline-image.image-placeholder {
   user-select: none;
   position: relative; /* Added */
   max-width: 100%; /* ADDED to make placeholder respect its container's width */
+  
+  /* Prevent text input into the image placeholder */
+  -webkit-user-modify: read-only;
+
+}
+
+/* Allow pointer events on inner spans for image interaction */
+span.inline-image.image-placeholder span.image-inner,
+span.inline-image.image-placeholder span.image-resize-handle {
+  pointer-events: auto;
 }
 
 /* Style the INNER span to display the image */
@@ -98,6 +107,25 @@ span.inline-image.image-placeholder span.image-resize-handle {
   z-index: 1;
   display: none; /* Initially hidden */
   cursor: nw-resize; /* Double-sided diagonal arrow */
+  
+  /* Prevent text input and selection */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  
+  /* Ensure contenteditable false is respected */
+  -webkit-user-modify: read-only;
+  
+  /* Prevent any text content from showing */
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  
+  /* Override any inherited text styles */
+  text-decoration: none !important;
+  font-weight: normal !important;
+  font-style: normal !important;
 }
 
 /* Selection styling is handled via dynamic CSS injection in JavaScript */
@@ -264,3 +292,14 @@ span.inline-image.image-placeholder.image-float-right + span.inline-image.image-
 /* This might need JS adjustment based on calculated width */
 
 /* === END Styles for resize handles === */
+
+/* === START Float containment fix - minimal approach === */
+
+/* Clear floated content after the last line */
+.ace-line:last-child::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* === END Float containment fix === */
