@@ -1,3 +1,5 @@
+// Modified from ep_image_insert 1.0.7 
+
 'use strict';
 
 exports.loadSettings = (hookName, settings, cb) => {
