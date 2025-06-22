@@ -1,5 +1,5 @@
 'use strict';
-
+// Modified from ep_image_insert 1.0.7 
 
 // Simple UUID generator
 function generateUUID() {
@@ -64,7 +64,7 @@ function findImagePlaceholderPosition(lineText, imageIndex, fallbackLineElement 
   
   for (let i = searchStart; i < searchEnd; i++) {
     if (lineText[i] === zwspPattern) {
-      console.log(`[ep_images_extended] Fallback: Found ZWSP at position ${i} for image index ${imageIndex}`);
+      // console.log(`[ep_images_extended] Fallback: Found ZWSP at position ${i} for image index ${imageIndex}`);
       return {
         colStart: i,
         patternLength: 1,
@@ -75,7 +75,7 @@ function findImagePlaceholderPosition(lineText, imageIndex, fallbackLineElement 
   
   // DOM-based fallback: when text-based approach fails, use DOM positioning
   if (fallbackLineElement) {
-    console.log(`[ep_images_extended] DOM fallback: Using DOM-based positioning for image index ${imageIndex}`);
+    // console.log(`[ep_images_extended] DOM fallback: Using DOM-based positioning for image index ${imageIndex}`);
     
     // Count characters before the target image element in the DOM
     const allImagePlaceholders = Array.from(fallbackLineElement.querySelectorAll('.inline-image.image-placeholder'));
@@ -97,7 +97,7 @@ function findImagePlaceholderPosition(lineText, imageIndex, fallbackLineElement 
             (currentNode.parentNode === targetImageElement || 
              targetImageElement.contains(currentNode.parentNode))) {
           // Found a text node that belongs to our target image
-          console.log(`[ep_images_extended] DOM fallback: Found position ${approximatePosition} for image index ${imageIndex}`);
+          // console.log(`[ep_images_extended] DOM fallback: Found position ${approximatePosition} for image index ${imageIndex}`);
           return {
             colStart: approximatePosition,
             patternLength: 3, // Assume 3 characters for safety
@@ -111,7 +111,7 @@ function findImagePlaceholderPosition(lineText, imageIndex, fallbackLineElement 
       }
       
       // If we couldn't find the exact position, use a reasonable estimate
-      console.log(`[ep_images_extended] DOM fallback: Using estimated position ${approximatePosition} for image index ${imageIndex}`);
+      // console.log(`[ep_images_extended] DOM fallback: Using estimated position ${approximatePosition} for image index ${imageIndex}`);
       return {
         colStart: Math.max(0, approximatePosition - 1),
         patternLength: 3,
@@ -282,9 +282,9 @@ exports.postAceInit = function (hook, context) {
 
   // Check if image formatting menu exists (should be loaded from template)
   if ($('#imageFormatMenu').length === 0) {
-      console.log('[ep_images_extended] Image format menu not found - template may not be loaded yet');
+      // console.log('[ep_images_extended] Image format menu not found - template may not be loaded yet');
   } else {
-      console.log('[ep_images_extended] Image format menu found from template');
+      // console.log('[ep_images_extended] Image format menu found from template');
   }
 
   const $outlineBoxRef = padOuter.find('#imageResizeOutline');
@@ -461,53 +461,53 @@ exports.postAceInit = function (hook, context) {
         }
         
         // *** ENHANCED DEBUG: Track image click within table context ***
-        console.log('[ep_images_extended] *** IMAGE MOUSEDOWN EVENT START ***');
-        console.log('[ep_images_extended] Event target:', evt.target);
-        console.log('[ep_images_extended] Event currentTarget:', evt.currentTarget);
+        // console.log('[ep_images_extended] *** IMAGE MOUSEDOWN EVENT START ***');
+        // console.log('[ep_images_extended] Event target:', evt.target);
+        // console.log('[ep_images_extended] Event currentTarget:', evt.currentTarget);
         
         targetOuterSpan = this;
         const $targetOuterSpan = $(targetOuterSpan);
-        console.log('[ep_images_extended] Target outer span element:', targetOuterSpan);
-        console.log('[ep_images_extended] Target outer span classes:', targetOuterSpan.className);
-        console.log('[ep_images_extended] Target outer span HTML length:', targetOuterSpan.outerHTML?.length || 0);
+        // console.log('[ep_images_extended] Target outer span element:', targetOuterSpan);
+        // console.log('[ep_images_extended] Target outer span classes:', targetOuterSpan.className);
+        // console.log('[ep_images_extended] Target outer span HTML length:', targetOuterSpan.outerHTML?.length || 0);
 
         // *** DEBUG: Check table context ***
         const closestTable = targetOuterSpan.closest('table.dataTable');
         const closestTableCell = targetOuterSpan.closest('td, th');
         const closestAceLine = targetOuterSpan.closest('.ace-line');
         
-        console.log('[ep_images_extended] Is image within table?', !!closestTable);
+        // console.log('[ep_images_extended] Is image within table?', !!closestTable);
         if (closestTable) {
-            console.log('[ep_images_extended] Table tblId:', closestTable.getAttribute('data-tblId'));
-            console.log('[ep_images_extended] Table row:', closestTable.getAttribute('data-row'));
-            console.log('[ep_images_extended] Table cell:', !!closestTableCell);
+            // console.log('[ep_images_extended] Table tblId:', closestTable.getAttribute('data-tblId'));
+            // console.log('[ep_images_extended] Table row:', closestTable.getAttribute('data-row'));
+            // console.log('[ep_images_extended] Table cell:', !!closestTableCell);
             if (closestTableCell) {
-                console.log('[ep_images_extended] Cell data-column:', closestTableCell.getAttribute('data-column'));
-                console.log('[ep_images_extended] Cell innerHTML length:', closestTableCell.innerHTML?.length || 0);
+                // console.log('[ep_images_extended] Cell data-column:', closestTableCell.getAttribute('data-column'));
+                // console.log('[ep_images_extended] Cell innerHTML length:', closestTableCell.innerHTML?.length || 0);
             }
         }
         if (closestAceLine) {
-            console.log('[ep_images_extended] Ace line ID:', closestAceLine.id);
-            console.log('[ep_images_extended] Ace line classes:', closestAceLine.className);
-            console.log('[ep_images_extended] Ace line innerHTML length:', closestAceLine.innerHTML?.length || 0);
+            // console.log('[ep_images_extended] Ace line ID:', closestAceLine.id);
+            // console.log('[ep_images_extended] Ace line classes:', closestAceLine.className);
+            // console.log('[ep_images_extended] Ace line innerHTML length:', closestAceLine.innerHTML?.length || 0);
         }
 
         const imageId = $targetOuterSpan.attr('data-image-id');
-        console.log('[ep_images_extended] Image ID:', imageId);
+        // console.log('[ep_images_extended] Image ID:', imageId);
         
         if (imageId) {
             const previouslyActiveId = window.epImageInsertActiveImageId;
-            console.log('[ep_images_extended] Previously active image ID:', previouslyActiveId);
-            console.log('[ep_images_extended] Setting new active image ID:', imageId);
+            // console.log('[ep_images_extended] Previously active image ID:', previouslyActiveId);
+            // console.log('[ep_images_extended] Setting new active image ID:', imageId);
             
             window.epImageInsertActiveImageId = imageId; // NEW: Set active ID
 
             // *** DEBUG: Track selection styling changes ***
-            console.log('[ep_images_extended] *** SELECTION STYLING START ***');
+            // console.log('[ep_images_extended] *** SELECTION STYLING START ***');
             
             // Use dynamic CSS injection to avoid triggering content collector on image elements
             if (previouslyActiveId !== imageId) {
-                console.log('[ep_images_extended] Updating dynamic CSS selection');
+                // console.log('[ep_images_extended] Updating dynamic CSS selection');
                 const innerDoc = $inner[0].ownerDocument;
                 
                 // Remove previous dynamic style if it exists
@@ -530,25 +530,25 @@ exports.postAceInit = function (hook, context) {
                         }
                     `;
                     innerDoc.head.appendChild(styleElement);
-                    console.log('[ep_images_extended] Added dynamic CSS for image:', imageId);
+                    // console.log('[ep_images_extended] Added dynamic CSS for image:', imageId);
                 }
             }
             
-            console.log('[ep_images_extended] *** SELECTION STYLING END ***');
+            // console.log('[ep_images_extended] *** SELECTION STYLING END ***');
             
             // *** DEBUG: Check DOM state after style changes ***
             if (closestAceLine) {
-                console.log('[ep_images_extended] *** DOM STATE AFTER STYLE CHANGES ***');
-                console.log('[ep_images_extended] Ace line innerHTML length after style changes:', closestAceLine.innerHTML?.length || 0);
-                console.log('[ep_images_extended] Ace line innerHTML (first 500 chars):', closestAceLine.innerHTML?.substring(0, 500) || '');
+                // console.log('[ep_images_extended] *** DOM STATE AFTER STYLE CHANGES ***');
+                // console.log('[ep_images_extended] Ace line innerHTML length after style changes:', closestAceLine.innerHTML?.length || 0);
+                // console.log('[ep_images_extended] Ace line innerHTML (first 500 chars):', closestAceLine.innerHTML?.substring(0, 500) || '');
                 
                 // Check for delimiter presence in the line
                 const delimiterCount = (closestAceLine.innerHTML || '').split('|').length - 1;
-                console.log('[ep_images_extended] Delimiter count in ace line after style changes:', delimiterCount);
+                // console.log('[ep_images_extended] Delimiter count in ace line after style changes:', delimiterCount);
                 
                 // Check if tbljson class is still present
                 const hasTbljsonClass = closestAceLine.innerHTML?.includes('tbljson-') || false;
-                console.log('[ep_images_extended] Ace line still has tbljson class after changes:', hasTbljsonClass);
+                // console.log('[ep_images_extended] Ace line still has tbljson class after changes:', hasTbljsonClass);
             }
             
             showFormatMenu(targetOuterSpan);
@@ -566,11 +566,11 @@ exports.postAceInit = function (hook, context) {
 
         const target = $(evt.target);
         const isResizeHandle = target.hasClass('image-resize-handle');
-        console.log('[ep_images_extended] Is resize handle clicked?', isResizeHandle);
+        // console.log('[ep_images_extended] Is resize handle clicked?', isResizeHandle);
 
         // If clicking on a resize handle, start the resize operation
         if (isResizeHandle) {
-            console.log('[ep_images_extended] *** RESIZE HANDLE CLICKED - STARTING RESIZE OPERATION ***');
+            // console.log('[ep_images_extended] *** RESIZE HANDLE CLICKED - STARTING RESIZE OPERATION ***');
             isDragging = true;
             outlineBoxPositioned = false;
             startX = evt.clientX;
@@ -620,7 +620,7 @@ exports.postAceInit = function (hook, context) {
                             colStart: placeholderInfo.colStart,
                             patternLength: placeholderInfo.patternLength
                         };
-                        console.log(`[ep_images_extended mousedown] Found placeholder at position ${placeholderInfo.colStart} with pattern length ${placeholderInfo.patternLength}`);
+                        // console.log(`[ep_images_extended mousedown] Found placeholder at position ${placeholderInfo.colStart} with pattern length ${placeholderInfo.patternLength}`);
                     } else {
                         console.error(`[ep_images_extended mousedown] Could not find any placeholder sequence for image index ${imageIndex} in line text: "${lineText}"`);
                         resizePositionData = null;
@@ -636,7 +636,7 @@ exports.postAceInit = function (hook, context) {
             }
             evt.preventDefault();
           } else {
-            console.log('[ep_images_extended] *** SIMPLE IMAGE CLICK - NO RESIZE HANDLE ***');
+            // console.log('[ep_images_extended] *** SIMPLE IMAGE CLICK - NO RESIZE HANDLE ***');
             // Position cursor next to the image instead of inside it
             _aceContext.callWithAce((ace) => {
                 const lineElement = $(targetOuterSpan).closest('.ace-line')[0];
@@ -665,7 +665,7 @@ exports.postAceInit = function (hook, context) {
                                     cursorPos = [lineNumber, placeholderInfo.colStart + placeholderInfo.patternLength];
                                 }
                                 
-                                console.log(`[ep_images_extended] Positioning cursor at [${cursorPos}] based on click position`);
+                                // console.log(`[ep_images_extended] Positioning cursor at [${cursorPos}] based on click position`);
                                 ace.ace_performSelectionChange(cursorPos, cursorPos, false);
                             }
                         }
@@ -674,7 +674,7 @@ exports.postAceInit = function (hook, context) {
             }, 'positionCursorNextToImage', true);
         }
         
-        console.log('[ep_images_extended] *** IMAGE MOUSEDOWN EVENT END ***');
+        // console.log('[ep_images_extended] *** IMAGE MOUSEDOWN EVENT END ***');
     });
 
     innerDoc.on('mousemove', function(evt) {
@@ -790,7 +790,7 @@ exports.postAceInit = function (hook, context) {
 
             // Don't apply styles directly to avoid triggering content collector
             // The visual updates will be handled by acePostWriteDomLineHTML after attributes are applied
-            console.log('[ep_images_extended mouseup] Skipping direct style application to avoid content collection triggers');
+            // console.log('[ep_images_extended mouseup] Skipping direct style application to avoid content collection triggers');
 
             _aceContext.callWithAce((ace) => {
                 const outerSpanAlive = (targetOuterSpan && document.contains(targetOuterSpan)) ? targetOuterSpan : null;
@@ -817,7 +817,7 @@ exports.postAceInit = function (hook, context) {
                         ['image-height', heightToApplyPx],
                         ['imageCssAspectRatio', newCssAspectRatioForVar]
                     ]);
-                    console.log('[ep_images_extended mouseup] Successfully applied resize attributes (new targeting)');
+                    // console.log('[ep_images_extended mouseup] Successfully applied resize attributes (new targeting)');
                 } catch (err) {
                     console.error('[ep_images_extended mouseup] Error applying resize attributes:', err);
                 }
@@ -1045,7 +1045,7 @@ exports.postAceInit = function (hook, context) {
     
     // Function to show user feedback for copy/cut operations
     const showCopyFeedback = (message) => {
-        console.log(`[ep_images_extended] ${message}`);
+        // console.log(`[ep_images_extended] ${message}`);
         // Could be enhanced with a temporary toast notification
     };
     
@@ -1217,7 +1217,7 @@ exports.postAceInit = function (hook, context) {
                                     // Delete the image by replacing the text range with empty string
                                     ace.ace_replaceRange(rangeStart, rangeEnd, '');
                                     
-                                    console.log('Successfully cut image at line', targetLineNumber, 'column', placeholderInfo.colStart);
+                                    // console.log('Successfully cut image at line', targetLineNumber, 'column', placeholderInfo.colStart);
                                     
                                 } catch (error) {
                                     console.error('[ep_images_extended cut] Error deleting image:', error);
@@ -1324,7 +1324,7 @@ exports.postAceInit = function (hook, context) {
                                         ['image-float', floatValue]
                                     ]);
                                     
-                                    console.log('Applied float attribute:', floatValue, 'to image');
+                                    // console.log('Applied float attribute:', floatValue, 'to image');
                                     
                                 } catch (error) {
                                     console.error('[ep_images_extended float] Error applying float attribute:', error);
@@ -1341,13 +1341,13 @@ exports.postAceInit = function (hook, context) {
         } else if (action) {
             // Handle action buttons
             if (action === 'copy') {
-                console.log('Copy image action triggered');
+                // console.log('Copy image action triggered');
                 handleImageCopy(false); // false = copy (don't delete after copy)
             } else if (action === 'cut') {
-                console.log('Cut image action triggered');
+                // console.log('Cut image action triggered');
                 handleImageCopy(true); // true = cut (delete after copy)
             } else if (action === 'delete') {
-                console.log('Delete image action triggered');
+                // console.log('Delete image action triggered');
                 
                 // Use the specific selected image element (like float and resize logic does)
                 if (currentElement) {
@@ -1367,7 +1367,7 @@ exports.postAceInit = function (hook, context) {
 
                         try {
                             ace.ace_replaceRange(rangeStart, rangeEnd, '');
-                            console.log('[ep_images_extended delete] Successfully deleted image via helper');
+                            // console.log('[ep_images_extended delete] Successfully deleted image via helper');
                         } catch (err) {
                             console.error('[ep_images_extended delete] Error deleting image:', err);
                         }
@@ -1391,7 +1391,7 @@ function _getLineNumberOfElement(element) {
 }
 
 exports.aceEditorCSS = (hookName, context) => {
-  console.log('[ep_images_extended] aceEditorCSS called - loading CSS file');
+  // console.log('[ep_images_extended] aceEditorCSS called - loading CSS file');
   return [
     'ep_images_extended/static/css/ace.css'
   ];

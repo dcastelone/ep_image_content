@@ -1,5 +1,5 @@
 'use strict';
-
+// Modified from ep_image_insert 1.0.7 
 const _isValid = (file) => {
   const mimedb = clientVars.ep_images_extended.mimeTypes;
   const mimeType = mimedb[file.type];

@@ -1,5 +1,5 @@
 'use strict';
-
+// Modified from ep_image_insert 1.0.7 
 // This hook is called **before** the text of a line/segment is processed by the Changeset library.
 const collectContentPre = (hook, context) => {
   const classes = context.cls ? context.cls.split(' ') : [];

@@ -1,5 +1,5 @@
 'use strict';
-
+// Modified from ep_image_insert 1.0.7 
 const eejs = require('ep_etherpad-lite/node/eejs/');
 const settings = require('ep_etherpad-lite/node/utils/Settings');
 const { randomUUID } = require('crypto');

@@ -81,3 +81,8 @@ All other values are ignored.
 This was mostly made by LLMs (my requirements in this project were far beyond my coding ability at this time). Bug reports & PRs are welcome! See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the coding guidelines and branching model.
 
 ---
+
+## Credits / Upstream
+This plugin started as a heavy rewrite of
+[ep_image_insert](https://github.com/mamylinx/ep_image_insert)
+by Mamy Linx, John McLear, Ilmar Türk and other contributors.

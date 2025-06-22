@@ -1,5 +1,5 @@
 'use strict';
-
+// Modified from ep_image_insert 1.0.7 
 const Changeset = require('ep_etherpad-lite/static/js/Changeset');
 const Security = require('ep_etherpad-lite/static/js/security');
 
