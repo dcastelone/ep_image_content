@@ -962,7 +962,7 @@ exports.postAceInit = function (hook, context) {
                             try {
                                 const formData = new FormData();
                                 formData.append('file', file, file.name);
-                                const uploadUrl = await $.ajax({
+                                const uploadResp = await $.ajax({
                                     type: 'POST',
                                     url: `${clientVars.padId}/pluginfw/ep_images_extended/upload`,
                                     data: formData,
@@ -970,12 +970,19 @@ exports.postAceInit = function (hook, context) {
                                     contentType: false,
                                     processData: false,
                                     timeout: 60000,
+                                    dataType: 'json',
                                 });
 
+                                if (!uploadResp || !uploadResp.url) {
+                                    throw new Error('Invalid upload response');
+                                }
+
+                                const publicUrl = uploadResp.url;
+
                                 const probeImg = new Image();
-                                probeImg.onload = () => insertIntoPad(uploadUrl, `${probeImg.naturalWidth}px`, `${probeImg.naturalHeight}px`);
-                                probeImg.onerror = () => insertIntoPad(uploadUrl);
-                                probeImg.src = uploadUrl;
+                                probeImg.onload = () => insertIntoPad(publicUrl, `${probeImg.naturalWidth}px`, `${probeImg.naturalHeight}px`);
+                                probeImg.onerror = () => insertIntoPad(publicUrl);
+                                probeImg.src = publicUrl;
                             } catch (err) {
                                 console.error('[ep_images_extended paste] Server upload failed, falling back to base64:', err);
                                 insertAsDataUrl(file);

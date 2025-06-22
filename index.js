@@ -103,76 +103,170 @@ exports.expressConfigure = (hookName, context) => {
    * New endpoint: GET /p/:padId/pluginfw/ep_images_extended/s3_presign
    * ------------------------------------------------------------------
    * Returns: { signedUrl: string, publicUrl: string }
-   * Only active when settings.ep_images_extended.storage.type === 's3_presigned'
+   * Register the route only when storage.type === 's3_presigned'
    */
-  context.app.get('/p/:padId/pluginfw/ep_images_extended/s3_presign', async (req, res) => {
-    /* ------------------ Basic auth check ------------------ */
-    const hasExpressSession = req.session && (req.session.user || req.session.authorId);
-    const hasPadCookie = req.cookies && (req.cookies.sessionID || req.cookies.token);
-    if (!hasExpressSession && !hasPadCookie) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    /* ------------------ Rate limiting --------------------- */
-    const ip = req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'unknown';
-    if (!_rateLimitCheck(ip)) {
-      return res.status(429).json({ error: 'Too many presign requests' });
-    }
-
-    try {
-      const storageCfg = settings.ep_images_extended && settings.ep_images_extended.storage;
-      if (!storageCfg || storageCfg.type !== 's3_presigned') {
-        return res.status(400).json({ error: 's3_presigned storage not enabled' });
+  if (settings.ep_images_extended && settings.ep_images_extended.storage && settings.ep_images_extended.storage.type === 's3_presigned') {
+    context.app.get('/p/:padId/pluginfw/ep_images_extended/s3_presign', async (req, res) => {
+      /* ------------------ Basic auth check ------------------ */
+      const hasExpressSession = req.session && (req.session.user || req.session.authorId);
+      const hasPadCookie = req.cookies && (req.cookies.sessionID || req.cookies.token);
+      if (!hasExpressSession && !hasPadCookie) {
+        return res.status(401).json({ error: 'Authentication required' });
       }
 
-      if (!S3Client || !PutObjectCommand || !getSignedUrl) {
-        return res.status(500).json({ error: 'AWS SDK not available on server' });
+      /* ------------------ Rate limiting --------------------- */
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'unknown';
+      if (!_rateLimitCheck(ip)) {
+        return res.status(429).json({ error: 'Too many presign requests' });
       }
 
-      const { bucket, region, publicURL, expires } = storageCfg;
-      if (!bucket || !region) {
-        return res.status(500).json({ error: 'Invalid S3 configuration' });
-      }
-
-      const { padId } = req.params;
-      const { name, type } = req.query;
-      if (!name || !type) {
-        return res.status(400).json({ error: 'Missing name or type' });
-      }
-
-      /* ------------- MIME / extension allow-list ------------ */
-      if (settings.ep_images_extended && settings.ep_images_extended.fileTypes && Array.isArray(settings.ep_images_extended.fileTypes)) {
-        const allowedExts = settings.ep_images_extended.fileTypes;
-        const extName = path.extname(name).replace('.', '').toLowerCase();
-        if (!allowedExts.includes(extName)) {
-          return res.status(400).json({ error: 'File type not allowed' });
+      try {
+        const storageCfg = settings.ep_images_extended && settings.ep_images_extended.storage;
+        if (!storageCfg || storageCfg.type !== 's3_presigned') {
+          return res.status(400).json({ error: 's3_presigned storage not enabled' });
         }
+
+        if (!S3Client || !PutObjectCommand || !getSignedUrl) {
+          return res.status(500).json({ error: 'AWS SDK not available on server' });
+        }
+
+        const { bucket, region, publicURL, expires } = storageCfg;
+        if (!bucket || !region) {
+          return res.status(500).json({ error: 'Invalid S3 configuration' });
+        }
+
+        const { padId } = req.params;
+        const { name, type } = req.query;
+        if (!name || !type) {
+          return res.status(400).json({ error: 'Missing name or type' });
+        }
+
+        /* ------------- MIME / extension allow-list ------------ */
+        if (settings.ep_images_extended && settings.ep_images_extended.fileTypes && Array.isArray(settings.ep_images_extended.fileTypes)) {
+          const allowedExts = settings.ep_images_extended.fileTypes;
+          const extName = path.extname(name).replace('.', '').toLowerCase();
+          if (!allowedExts.includes(extName)) {
+            return res.status(400).json({ error: 'File type not allowed' });
+          }
+        }
+
+        const ext = path.extname(name);
+        // Ensure ext starts with '.'; if not, prefix it
+        const safeExt = ext.startsWith('.') ? ext : `.${ext}`;
+        const key = `${padId}/${randomUUID()}${safeExt}`;
+
+        const s3Client = new S3Client({ region }); // credentials from env / IAM role
+
+        const putCommand = new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          ContentType: type,
+        });
+
+        const signedUrl = await getSignedUrl(s3Client, putCommand, { expiresIn: expires || 600 });
+
+        const basePublic = publicURL || `https://${bucket}.s3.${region}.amazonaws.com/`;
+        const publicUrl = new url.URL(key, basePublic).toString();
+
+        return res.json({ signedUrl, publicUrl });
+      } catch (err) {
+        logger.error('[ep_images_extended] S3 presign error', err);
+        return res.status(500).json({ error: 'Failed to generate presigned URL' });
+      }
+    });
+  }
+
+  // ADD LOCAL DISK STORAGE UPLOAD ENDPOINT ------------------------------
+  // Register the route only if storage.type === 'local'
+  if (settings.ep_images_extended && settings.ep_images_extended.storage && settings.ep_images_extended.storage.type === 'local') {
+    // Route: POST /p/:padId/pluginfw/ep_images_extended/upload
+    // Accepts multipart/form-data with field "file" and saves it to the
+    // configured baseFolder. Responds with the public URL of the uploaded file.
+    context.app.post('/p/:padId/pluginfw/ep_images_extended/upload', async (req, res) => {
+      /* ------------------ Basic auth check ------------------ */
+      const hasExpressSession = req.session && (req.session.user || req.session.authorId);
+      const hasPadCookie = req.cookies && (req.cookies.sessionID || req.cookies.token);
+      if (!hasExpressSession && !hasPadCookie) {
+        return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const ext = path.extname(name);
-      // Ensure ext starts with '.'; if not, prefix it
-      const safeExt = ext.startsWith('.') ? ext : `.${ext}`;
-      const key = `${padId}/${randomUUID()}${safeExt}`;
+      /* ------------------ Rate limiting --------------------- */
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'unknown';
+      if (!_rateLimitCheck(ip)) {
+        return res.status(429).json({ error: 'Too many uploads' });
+      }
 
-      const s3Client = new S3Client({ region }); // credentials from env / IAM role
+      try {
+        // Dynamically require formidable only when needed
+        const formidableMod = require('formidable');
+        const IncomingForm = formidableMod.IncomingForm || formidableMod; // support both v1 and v2+ exports
+        const form = new IncomingForm({ multiples: false, maxFileSize: settings.ep_images_extended.maxFileSize || 1024 * 1024 * 20 /* 20 MB default */ });
 
-      const putCommand = new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        ContentType: type,
-      });
+        form.parse(req, async (err, _fields, files) => {
+          if (err) {
+            logger.error('[ep_images_extended] formidable parse error', err);
+            return res.status(400).json({ error: 'Invalid form data' });
+          }
+          if (!files.file) {
+            return res.status(400).json({ error: 'No file provided' });
+          }
+          const uploaded = Array.isArray(files.file) ? files.file[0] : files.file;
+          const mimeType = uploaded.mimetype || uploaded.type || 'application/octet-stream';
 
-      const signedUrl = await getSignedUrl(s3Client, putCommand, { expiresIn: expires || 600 });
+          // Reject non-image MIME types
+          if (!mimeType.startsWith('image/')) {
+            return res.status(400).json({ error: 'Not an image MIME type' });
+          }
 
-      const basePublic = publicURL || `https://${bucket}.s3.${region}.amazonaws.com/`;
-      const publicUrl = new url.URL(key, basePublic).toString();
+          // Enforce fileTypes allow-list if configured
+          if (settings.ep_images_extended && Array.isArray(settings.ep_images_extended.fileTypes)) {
+            const allowedExts = settings.ep_images_extended.fileTypes;
+            const extName = path.extname(uploaded.originalFilename || uploaded.name).replace('.', '').toLowerCase();
+            if (!allowedExts.includes(extName)) {
+              return res.status(400).json({ error: 'File type not allowed' });
+            }
+          }
 
-      return res.json({ signedUrl, publicUrl });
-    } catch (err) {
-      logger.error('[ep_images_extended] S3 presign error', err);
-      return res.status(500).json({ error: 'Failed to generate presigned URL' });
-    }
-  });
+          const { padId } = req.params;
+          const safePad = path.basename(padId); // prevent path traversal
+          const baseFolder = settings.ep_images_extended.storage.baseFolder || path.join(settings.root || process.cwd(), 'src/static/images');
+          const destFolder = path.resolve(baseFolder, safePad);
+          await fsp.mkdir(destFolder, { recursive: true });
+
+          const newFilename = `${randomUUID()}${path.extname(uploaded.originalFilename || uploaded.name)}`;
+          const destPath = path.join(destFolder, newFilename);
+
+          try {
+            await fsp.rename(uploaded.filepath || uploaded.path, destPath);
+          } catch (errMove) {
+            if (errMove.code === 'EXDEV') {
+              // Cross-device move: fallback to copy & unlink
+              await fsp.copyFile(uploaded.filepath || uploaded.path, destPath);
+              await fsp.unlink(uploaded.filepath || uploaded.path);
+            } else {
+              throw errMove;
+            }
+          }
+
+          // Build public URL
+          let publicUrl;
+          if (settings.ep_images_extended.storage.baseURL) {
+            publicUrl = new url.URL(path.posix.join(safePad, newFilename), settings.ep_images_extended.storage.baseURL).toString();
+          } else {
+            // Default to Etherpad static path assumption
+            const relStatic = path.posix.join('/static/images', safePad, newFilename);
+            publicUrl = relStatic;
+          }
+
+          return res.json({ url: publicUrl });
+        });
+      } catch (e) {
+        logger.error('[ep_images_extended] Local upload error', e);
+        return res.status(500).json({ error: 'Failed to process upload' });
+      }
+    });
+  }
+  // ---------------------------------------------------------------------
 };
 
 /**

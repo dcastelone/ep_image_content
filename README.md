@@ -62,6 +62,22 @@ Create (or merge) an **`ep_images_extended`** block at the root of `settings.jso
    * `AWS_SECRET_ACCESS_KEY`
    * `AWS_SESSION_TOKEN` (if using temporary credentials)
    
+3. **Local disk storage** (files saved on the Etherpad server)
+   ```jsonc
+   "ep_images_extended": {
+     "storage": {
+       "type": "local",                 // enable disk uploads
+       "baseFolder": "static/images",   // optional – path relative to Etherpad root
+       "baseURL": "https://pad.example.com/etherpad-lite/static/images/" // optional – public URL prefix
+     },
+     "fileTypes": ["jpeg", "jpg", "png", "gif"],
+     "maxFileSize": 5000000
+   }
+   ```
+   The browser POSTs the file to `/pluginfw/ep_images_extended/upload`.
+   Etherpad writes it to `baseFolder/<padId>/<uuid>.ext` and returns the
+   public URL.
+   
 ---
 
 ## Contributing

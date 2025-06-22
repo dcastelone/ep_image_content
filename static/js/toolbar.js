@@ -164,11 +164,52 @@ exports.postToolbarInit = (hook, context) => {
             const errorTitle = html10n.get('ep_images_extended.error.title');
             $.gritter.add({ title: errorTitle, text: err.message, sticky: true, class_name: 'error' });
           });
+      } else if (clientVars.ep_images_extended.storageType === 'local') {
+        // -------- Upload to server local storage endpoint --------
+        $('#imageUploadModalLoader').addClass('popup-show');
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+
+        fetch(`${clientVars.padId}/pluginfw/ep_images_extended/upload`, {
+          method: 'POST',
+          body: formData,
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              throw new Error(`Upload failed with status ${response.status}`);
+            }
+            const data = await response.json();
+            if (!data || !data.url) throw new Error('Invalid upload response');
+            return data.url;
+          })
+          .then((publicUrl) => {
+            $('#imageUploadModalLoader').removeClass('popup-show');
+            const img = new Image();
+            img.onload = () => {
+              const widthPx = `${img.naturalWidth}px`;
+              const heightPx = `${img.naturalHeight}px`;
+              context.ace.callWithAce((ace) => {
+                ace.ace_doInsertImage(publicUrl, widthPx, heightPx);
+              }, 'imgUploadLocal', true);
+            };
+            img.onerror = () => {
+              context.ace.callWithAce((ace) => {
+                ace.ace_doInsertImage(publicUrl);
+              }, 'imgUploadLocalError', true);
+            };
+            img.src = publicUrl;
+          })
+          .catch((err) => {
+            console.error('[ep_images_extended toolbar] local upload failed', err);
+            $('#imageUploadModalLoader').removeClass('popup-show');
+            const errorTitle = html10n.get('ep_images_extended.error.title');
+            $.gritter.add({ title: errorTitle, text: err.message, sticky: true, class_name: 'error' });
+          });
       } else {
         // Unsupported storage type – show error and abort
         $('#imageUploadModalLoader').removeClass('popup-show');
         const errorTitle = html10n.get('ep_images_extended.error.title');
-        const errorText = `Unsupported storageType: ${clientVars.ep_images_extended.storageType}. Only "base64" and "s3_presigned" are supported.`;
+        const errorText = `Unsupported storageType: ${clientVars.ep_images_extended.storageType}. Only "base64", "s3_presigned", and "local" are supported.`;
         $.gritter.add({ title: errorTitle, text: errorText, sticky: true, class_name: 'error' });
       }
     });

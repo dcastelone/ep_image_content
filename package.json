@@ -1,10 +1,9 @@
 {
   "name": "ep_images_extended",
   "description": "Insert images inline with text, float them, resize them, and more.",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": {
     "name": "DCastelone",
-    "email": "daniel.m.castelone@gmail.com",
     "url": "https://github.com/dcastelone"
   },
   "contributors": [],
@@ -13,6 +12,15 @@
     "@aws-sdk/client-s3": "^3.555.0",
     "@aws-sdk/s3-request-presigner": "^3.555.0"
   },
+  "license": "Apache-2.0",
+  "keywords": [
+    "etherpad",
+    "plugin",
+    "ep",
+    "hyperlink",
+    "link",
+    "url"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dcastelone/ep_images_extended.git"
