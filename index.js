@@ -20,10 +20,10 @@ try {
   ({ getSignedUrl } = require('@aws-sdk/s3-request-presigner'));
 } catch (e) {
   // AWS SDK might be optional if s3_presigned storage is not used
-  console.warn('[ep_image_insert] AWS SDK not installed; s3_presigned storage will not work.');
+  console.warn('[ep_images_extended] AWS SDK not installed; s3_presigned storage will not work.');
 }
 
-const logger = log4js.getLogger('ep_image_insert');
+const logger = log4js.getLogger('ep_images_extended');
 
 // Simple in-memory IP rate limiter
 const _presignRateStore = new Map();
@@ -59,39 +59,39 @@ exports.clientVars = (hookName, args, cb) => {
   const pluginSettings = {
     storageType: 'local',
   };
-  if (!settings.ep_image_insert) {
-    settings.ep_image_insert = {};
+  if (!settings.ep_images_extended) {
+    settings.ep_images_extended = {};
   }
-  const keys = Object.keys(settings.ep_image_insert);
+  const keys = Object.keys(settings.ep_images_extended);
   keys.forEach((key) => {
     if (key !== 'storage') {
-      pluginSettings[key] = settings.ep_image_insert[key];
+      pluginSettings[key] = settings.ep_images_extended[key];
     }
   });
-  if (settings.ep_image_insert.storage)
+  if (settings.ep_images_extended.storage)
   {
-    pluginSettings.storageType = settings.ep_image_insert.storage.type;
+    pluginSettings.storageType = settings.ep_images_extended.storage.type;
   }
 
   pluginSettings.mimeTypes = mimetypes;
 
-  return cb({ep_image_insert: pluginSettings});
+  return cb({ep_images_extended: pluginSettings});
 };
 
 exports.eejsBlock_styles = (hookName, args, cb) => {
-  args.content += "<link href='../static/plugins/ep_image_insert/static/css/ace.css' rel='stylesheet'>";
+  args.content += "<link href='../static/plugins/ep_images_extended/static/css/ace.css' rel='stylesheet'>";
   return cb();
 };
 
 exports.eejsBlock_timesliderStyles = (hookName, args, cb) => {
-  args.content += "<link href='../../static/plugins/ep_image_insert/static/css/ace.css' rel='stylesheet'>";
+  args.content += "<link href='../../static/plugins/ep_images_extended/static/css/ace.css' rel='stylesheet'>";
   args.content += '<style>.control-container{display:none}</style>';
   return cb();
 };
 
 exports.eejsBlock_body = (hookName, args, cb) => {
-  const modal = eejs.require('ep_image_insert/templates/modal.ejs');
-  const imageFormatMenu = eejs.require('ep_image_insert/templates/imageFormatMenu.ejs');
+  const modal = eejs.require('ep_images_extended/templates/modal.ejs');
+  const imageFormatMenu = eejs.require('ep_images_extended/templates/imageFormatMenu.ejs');
   args.content += modal;
   args.content += imageFormatMenu;
 
@@ -100,12 +100,12 @@ exports.eejsBlock_body = (hookName, args, cb) => {
 
 exports.expressConfigure = (hookName, context) => {
   /* ------------------------------------------------------------------
-   * New endpoint: GET /p/:padId/pluginfw/ep_image_insert/s3_presign
+   * New endpoint: GET /p/:padId/pluginfw/ep_images_extended/s3_presign
    * ------------------------------------------------------------------
    * Returns: { signedUrl: string, publicUrl: string }
-   * Only active when settings.ep_image_insert.storage.type === 's3_presigned'
+   * Only active when settings.ep_images_extended.storage.type === 's3_presigned'
    */
-  context.app.get('/p/:padId/pluginfw/ep_image_insert/s3_presign', async (req, res) => {
+  context.app.get('/p/:padId/pluginfw/ep_images_extended/s3_presign', async (req, res) => {
     /* ------------------ Basic auth check ------------------ */
     const hasExpressSession = req.session && (req.session.user || req.session.authorId);
     const hasPadCookie = req.cookies && (req.cookies.sessionID || req.cookies.token);
@@ -120,7 +120,7 @@ exports.expressConfigure = (hookName, context) => {
     }
 
     try {
-      const storageCfg = settings.ep_image_insert && settings.ep_image_insert.storage;
+      const storageCfg = settings.ep_images_extended && settings.ep_images_extended.storage;
       if (!storageCfg || storageCfg.type !== 's3_presigned') {
         return res.status(400).json({ error: 's3_presigned storage not enabled' });
       }
@@ -141,8 +141,8 @@ exports.expressConfigure = (hookName, context) => {
       }
 
       /* ------------- MIME / extension allow-list ------------ */
-      if (settings.ep_image_insert && settings.ep_image_insert.fileTypes && Array.isArray(settings.ep_image_insert.fileTypes)) {
-        const allowedExts = settings.ep_image_insert.fileTypes;
+      if (settings.ep_images_extended && settings.ep_images_extended.fileTypes && Array.isArray(settings.ep_images_extended.fileTypes)) {
+        const allowedExts = settings.ep_images_extended.fileTypes;
         const extName = path.extname(name).replace('.', '').toLowerCase();
         if (!allowedExts.includes(extName)) {
           return res.status(400).json({ error: 'File type not allowed' });
@@ -169,7 +169,7 @@ exports.expressConfigure = (hookName, context) => {
 
       return res.json({ signedUrl, publicUrl });
     } catch (err) {
-      logger.error('[ep_image_insert] S3 presign error', err);
+      logger.error('[ep_images_extended] S3 presign error', err);
       return res.status(500).json({ error: 'Failed to generate presigned URL' });
     }
   });

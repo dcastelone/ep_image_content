@@ -1,11 +1,11 @@
 {
-  "name": "ep_image_insert",
-  "description": "Insert and resize images on etherpad",
-  "version": "1.0.7",
+  "name": "ep_images_extended",
+  "description": "Insert images inline with text, float them, resize them, and more.",
+  "version": "1.0.0",
   "author": {
-    "name": "Mamy Linx",
-    "email": "mamy.else@gmail.com",
-    "url": "https://github.com/mamylinx"
+    "name": "DCastelone",
+    "email": "daniel.m.castelone@gmail.com",
+    "url": "https://github.com/dcastelone"
   },
   "contributors": [],
   "dependencies": {
@@ -15,12 +15,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mamylinx/ep_image_insert.git"
+    "url": "git+https://github.com/dcastelone/ep_images_extended.git"
   },
   "bugs": {
-    "url": "https://github.com/mamylinx/ep_image_insert/issues"
+    "url": "https://github.com/dcastelone/ep_images_extended/issues"
   },
-  "homepage": "https://github.com/mamylinx/ep_image_insert",
+  "homepage": "https://github.com/dcastelone/ep_images_extended",
   "peerDependencies": {
     "ep_etherpad-lite": ">=1.8.6"
   },

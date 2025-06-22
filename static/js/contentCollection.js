@@ -45,42 +45,42 @@ const collectContentPre = (hook, context) => {
     try {
       context.cc.doAttrib(context.state, `image::${escapedSrc}`);
     } catch (e) {
-      console.error('[ep_image_insert collectContentPre] Error applying image attribute:', e);
+      console.error('[ep_images_extended collectContentPre] Error applying image attribute:', e);
     }
   }
   if (widthValue) {
     try {
         context.cc.doAttrib(context.state, `image-width::${widthValue}`);
     } catch (e) {
-        console.error('[ep_image_insert collectContentPre] Error applying image-width attribute:', e);
+        console.error('[ep_images_extended collectContentPre] Error applying image-width attribute:', e);
     }
   }
   if (heightValue) {
     try {
         context.cc.doAttrib(context.state, `image-height::${heightValue}`);
     } catch (e) {
-        console.error('[ep_image_insert collectContentPre] Error applying image-height attribute:', e);
+        console.error('[ep_images_extended collectContentPre] Error applying image-height attribute:', e);
     }
   }
   if (aspectRatioValue) {
     try {
         context.cc.doAttrib(context.state, `imageCssAspectRatio::${aspectRatioValue}`);
     } catch (e) {
-        console.error('[ep_image_insert collectContentPre] Error applying imageCssAspectRatio attribute:', e);
+        console.error('[ep_images_extended collectContentPre] Error applying imageCssAspectRatio attribute:', e);
     }
   }
   if (floatValue) {
     try {
         context.cc.doAttrib(context.state, `image-float::${floatValue}`);
     } catch (e) {
-        console.error('[ep_image_insert collectContentPre] Error applying image-float attribute:', e);
+        console.error('[ep_images_extended collectContentPre] Error applying image-float attribute:', e);
     }
   }
   if (imageIdValue) {
     try {
         context.cc.doAttrib(context.state, `image-id::${imageIdValue}`);
     } catch (e) {
-        console.error('[ep_image_insert collectContentPre] Error applying image-id attribute:', e);
+        console.error('[ep_images_extended collectContentPre] Error applying image-id attribute:', e);
     }
   }
 };

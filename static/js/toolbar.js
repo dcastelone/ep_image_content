@@ -1,15 +1,15 @@
 'use strict';
 
 const _isValid = (file) => {
-  const mimedb = clientVars.ep_image_insert.mimeTypes;
+  const mimedb = clientVars.ep_images_extended.mimeTypes;
   const mimeType = mimedb[file.type];
   let validMime = null;
-  const errorTitle = html10n.get('ep_image_insert.error.title');
+  const errorTitle = html10n.get('ep_images_extended.error.title');
 
-  if (clientVars.ep_image_insert && clientVars.ep_image_insert.fileTypes) {
+  if (clientVars.ep_images_extended && clientVars.ep_images_extended.fileTypes) {
     validMime = false;
     if (mimeType && mimeType.extensions) {
-      for (const fileType of clientVars.ep_image_insert.fileTypes) {
+      for (const fileType of clientVars.ep_images_extended.fileTypes) {
         const exists = mimeType.extensions.indexOf(fileType);
         if (exists > -1) {
           validMime = true;
@@ -18,15 +18,15 @@ const _isValid = (file) => {
       }
     }
     if (validMime === false) {
-      const errorMessage = html10n.get('ep_image_insert.error.fileType');
+      const errorMessage = html10n.get('ep_images_extended.error.fileType');
       $.gritter.add({ title: errorTitle, text: errorMessage, sticky: true, class_name: 'error' });
       return false;
     }
   }
 
-  if (clientVars.ep_image_insert && file.size > clientVars.ep_image_insert.maxFileSize) {
-    const allowedSize = (clientVars.ep_image_insert.maxFileSize / 1000000);
-    const errorText = html10n.get('ep_image_insert.error.fileSize', { maxallowed: allowedSize });
+  if (clientVars.ep_images_extended && file.size > clientVars.ep_images_extended.maxFileSize) {
+    const allowedSize = (clientVars.ep_images_extended.maxFileSize / 1000000);
+    const errorText = html10n.get('ep_images_extended.error.fileSize', { maxallowed: allowedSize });
     $.gritter.add({ title: errorTitle, text: errorText, sticky: true, class_name: 'error' });
     return false;
   }
@@ -86,7 +86,7 @@ exports.postToolbarInit = (hook, context) => {
         return; // Validation errors are handled by _isValid
       }
 
-      if (clientVars.ep_image_insert.storageType === 'base64') {
+      if (clientVars.ep_images_extended.storageType === 'base64') {
         $('#imageUploadModalLoader').removeClass('popup-show'); // Ensure loader is hidden initially
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -101,7 +101,7 @@ exports.postToolbarInit = (hook, context) => {
             }, 'imgBase64', true);
           };
           img.onerror = () => {
-             console.error('[ep_image_insert toolbar] Failed to load Base64 image data to get dimensions. Inserting without dimensions.');
+             console.error('[ep_images_extended toolbar] Failed to load Base64 image data to get dimensions. Inserting without dimensions.');
              context.ace.callWithAce((ace) => {
                ace.ace_doInsertImage(data);
             }, 'imgBase64Error', true);
@@ -109,17 +109,17 @@ exports.postToolbarInit = (hook, context) => {
           img.src = data;
         };
         reader.onerror = (error_evt) => { // Added error handling for FileReader
-            console.error('[ep_image_insert toolbar] FileReader error:', error_evt);
-            const errorTitle = html10n.get('ep_image_insert.error.title');
-            const errorMessage = html10n.get('ep_image_insert.error.fileRead'); // Generic file read error
+            console.error('[ep_images_extended toolbar] FileReader error:', error_evt);
+            const errorTitle = html10n.get('ep_images_extended.error.title');
+            const errorMessage = html10n.get('ep_images_extended.error.fileRead'); // Generic file read error
             $.gritter.add({ title: errorTitle, text: errorMessage, sticky: true, class_name: 'error' });
         };
-      } else if (clientVars.ep_image_insert.storageType === 's3_presigned') {
+      } else if (clientVars.ep_images_extended.storageType === 's3_presigned') {
         // -------- Direct browser -> S3 upload via presigned URL --------
         const queryParams = $.param({ name: file.name, type: file.type });
         $('#imageUploadModalLoader').addClass('popup-show');
 
-        $.getJSON(`${clientVars.padId}/pluginfw/ep_image_insert/s3_presign?${queryParams}`)
+        $.getJSON(`${clientVars.padId}/pluginfw/ep_images_extended/s3_presign?${queryParams}`)
           .then((presignData) => {
             if (!presignData || !presignData.signedUrl || !presignData.publicUrl) {
               throw new Error('Invalid presign response');
@@ -151,7 +151,7 @@ exports.postToolbarInit = (hook, context) => {
               }, 'imgUploadS3', true);
             };
             img.onerror = () => {
-              console.warn('[ep_image_insert toolbar] Could not load uploaded S3 image to measure size. Inserting without dimensions.');
+              console.warn('[ep_images_extended toolbar] Could not load uploaded S3 image to measure size. Inserting without dimensions.');
               context.ace.callWithAce((ace) => {
                 ace.ace_doInsertImage(publicUrl);
               }, 'imgUploadS3Error', true);
@@ -159,16 +159,16 @@ exports.postToolbarInit = (hook, context) => {
             img.src = publicUrl;
           })
           .catch((err) => {
-            console.error('[ep_image_insert toolbar] s3_presigned upload failed', err);
+            console.error('[ep_images_extended toolbar] s3_presigned upload failed', err);
             $('#imageUploadModalLoader').removeClass('popup-show');
-            const errorTitle = html10n.get('ep_image_insert.error.title');
+            const errorTitle = html10n.get('ep_images_extended.error.title');
             $.gritter.add({ title: errorTitle, text: err.message, sticky: true, class_name: 'error' });
           });
       } else {
         // Unsupported storage type – show error and abort
         $('#imageUploadModalLoader').removeClass('popup-show');
-        const errorTitle = html10n.get('ep_image_insert.error.title');
-        const errorText = `Unsupported storageType: ${clientVars.ep_image_insert.storageType}. Only "base64" and "s3_presigned" are supported.`;
+        const errorTitle = html10n.get('ep_images_extended.error.title');
+        const errorText = `Unsupported storageType: ${clientVars.ep_images_extended.storageType}. Only "base64" and "s3_presigned" are supported.`;
         $.gritter.add({ title: errorTitle, text: errorText, sticky: true, class_name: 'error' });
       }
     });

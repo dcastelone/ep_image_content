@@ -54,12 +54,12 @@ exports.getLineHTMLForExport = async (hook, context) => {
             imgTag += `>`;
             htmlSegment = imgTag;
           } else {
-             console.warn(`[ep_image_insert exportHTML] Invalid unescaped image src: ${decodedSrc}`);
+             console.warn(`[ep_images_extended exportHTML] Invalid unescaped image src: ${decodedSrc}`);
              // Keep default htmlSegment (escaped placeholder text) or specific error
              htmlSegment = '[Invalid Image Src]';
           }
         } catch (e) {
-          console.error(`[ep_image_insert exportHTML] Error processing image attribute: ${imageSrcAttrib}`, e);
+          console.error(`[ep_images_extended exportHTML] Error processing image attribute: ${imageSrcAttrib}`, e);
           htmlSegment = '[Image Processing Error]';
         }
       }
