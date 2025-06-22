@@ -1,7 +1,7 @@
 {
   "parts": [
     {
-      "name": "ep_image_insert",
+      "name": "main",
       "client_hooks": {
         "postToolbarInit": "ep_image_insert/static/js/toolbar",
         "aceAttribsToClasses" : "ep_image_insert/static/js/clientHooks",
@@ -24,10 +24,9 @@
         "eejsBlock_editbarMenuLeft": "ep_image_insert/editbar",
         "loadSettings": "ep_image_insert/settings",
         "padRemove": "ep_image_insert/index",
+        "collectContentPre": "ep_image_insert/static/js/contentCollection",
         "eejsBlock_styles": "ep_image_insert/index",
         "eejsBlock_timesliderStyles": "ep_image_insert/index",
-        "import": "ep_image_insert/index",
-        "collectContentPre": "ep_image_insert/static/js/contentCollection",
         "ccRegisterBlockElements": "ep_image_insert/index"
       }
     }

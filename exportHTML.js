@@ -63,10 +63,7 @@ exports.getLineHTMLForExport = async (hook, context) => {
           htmlSegment = '[Image Processing Error]';
         }
       }
-      // Note: This part does not explicitly handle other formatting attributes (bold, italic)
-      // on the image placeholder itself. Typically, images are standalone and don't carry
-      // such text formatting. If the placeholder character was part of a larger formatted
-      // text run, Etherpad's core export logic should handle closing/reopening tags around this segment.
+
 
       generatedHTML += htmlSegment;
       currentPos += opChars;
@@ -76,12 +73,9 @@ exports.getLineHTMLForExport = async (hook, context) => {
      // Line has no attributes, just escape the text
      context.lineContent = Security.escapeHTML(context.text);
   }
-  // Ensure cb() is not called if we are modifying context.lineContent directly.
-  // The hook expects a Promise or direct modification.
+
 };
 
 exports.stylesForExport = (hook, padId, cb) => {
-  // We're now using inline styles plus width/height attributes for the img tag.
-  // A general max-width might still be useful for older clients or specific scenarios.
   cb('img { max-width: 100%; vertical-align: middle; }');
 };

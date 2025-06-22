@@ -1,19 +1,5 @@
 'use strict';
 
-// Removed _handleNewLines as we insert inline now
-/*
-const _handleNewLines = (ace) => {
-  const rep = ace.ace_getRep();
-  const lineNumber = rep.selStart[0];
-  const curLine = rep.lines.atIndex(lineNumber);
-  if (curLine.text) {
-    ace.ace_doReturnKey();
-    return lineNumber + 1;
-  }
-  return lineNumber;
-};
-*/
-
 const _isValid = (file) => {
   const mimedb = clientVars.ep_image_insert.mimeTypes;
   const mimeType = mimedb[file.type];
@@ -128,54 +114,62 @@ exports.postToolbarInit = (hook, context) => {
             const errorMessage = html10n.get('ep_image_insert.error.fileRead'); // Generic file read error
             $.gritter.add({ title: errorTitle, text: errorMessage, sticky: true, class_name: 'error' });
         };
-      } else { // Upload storage type
-        const formData = new FormData();
-        formData.append('file', file, file.name);
+      } else if (clientVars.ep_image_insert.storageType === 's3_presigned') {
+        // -------- Direct browser -> S3 upload via presigned URL --------
+        const queryParams = $.param({ name: file.name, type: file.type });
         $('#imageUploadModalLoader').addClass('popup-show');
-        $.ajax({
-          type: 'POST',
-          url: `${clientVars.padId}/pluginfw/ep_image_insert/upload`,
-          xhr: () => $.ajaxSettings.xhr(), // Simplified XHR
-          success: (data) => {
+
+        $.getJSON(`${clientVars.padId}/pluginfw/ep_image_insert/s3_presign?${queryParams}`)
+          .then((presignData) => {
+            if (!presignData || !presignData.signedUrl || !presignData.publicUrl) {
+              throw new Error('Invalid presign response');
+            }
+
+            // Upload the file directly to S3
+            return fetch(presignData.signedUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': file.type },
+              body: file,
+            }).then((response) => {
+              if (!response.ok) {
+                throw new Error(`S3 upload failed with status ${response.status}`);
+              }
+              return presignData.publicUrl;
+            });
+          })
+          .then((publicUrl) => {
+            // Remove loader
             $('#imageUploadModalLoader').removeClass('popup-show');
+
+            // Obtain intrinsic dimensions by loading image
             const img = new Image();
             img.onload = () => {
               const widthPx = `${img.naturalWidth}px`;
               const heightPx = `${img.naturalHeight}px`;
               context.ace.callWithAce((ace) => {
-                ace.ace_doInsertImage(data, widthPx, heightPx);
-              }, 'imgUpload', true);
+                ace.ace_doInsertImage(publicUrl, widthPx, heightPx);
+              }, 'imgUploadS3', true);
             };
             img.onerror = () => {
-               console.error(`[ep_image_insert toolbar] Failed to load uploaded image URL (${data}) to get dimensions. Inserting without dimensions.`);
-               context.ace.callWithAce((ace) => {
-                 ace.ace_doInsertImage(data);
-              }, 'imgUploadError', true);
+              console.warn('[ep_image_insert toolbar] Could not load uploaded S3 image to measure size. Inserting without dimensions.');
+              context.ace.callWithAce((ace) => {
+                ace.ace_doInsertImage(publicUrl);
+              }, 'imgUploadS3Error', true);
             };
-            img.src = data;
-          },
-          error: (error) => {
-            $('#imageUploadModalLoader').removeClass('popup-show'); // Ensure loader hidden on error
-            let errorResponse;
-            try {
-              errorResponse = JSON.parse(error.responseText.trim());
-              if (errorResponse.type) {
-                errorResponse.message = `ep_image_insert.error.${errorResponse.type}`;
-              }
-            } catch (err) {
-              errorResponse = { message: error.responseText }; // Fallback to raw error
-            }
+            img.src = publicUrl;
+          })
+          .catch((err) => {
+            console.error('[ep_image_insert toolbar] s3_presigned upload failed', err);
+            $('#imageUploadModalLoader').removeClass('popup-show');
             const errorTitle = html10n.get('ep_image_insert.error.title');
-            const errorText = html10n.get(errorResponse.message, {}, errorResponse.message); // Provide fallback for html10n
-            $.gritter.add({ title: errorTitle, text: errorText, sticky: true, class_name: 'error' });
-          },
-          async: true,
-          data: formData,
-          cache: false,
-          contentType: false,
-          processData: false,
-          timeout: 60000,
-        });
+            $.gritter.add({ title: errorTitle, text: err.message, sticky: true, class_name: 'error' });
+          });
+      } else {
+        // Unsupported storage type – show error and abort
+        $('#imageUploadModalLoader').removeClass('popup-show');
+        const errorTitle = html10n.get('ep_image_insert.error.title');
+        const errorText = `Unsupported storageType: ${clientVars.ep_image_insert.storageType}. Only "base64" and "s3_presigned" are supported.`;
+        $.gritter.add({ title: errorTitle, text: errorText, sticky: true, class_name: 'error' });
       }
     });
     $(document).find('body').find('#imageInput').trigger('click');

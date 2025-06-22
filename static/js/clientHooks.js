@@ -1,6 +1,5 @@
 'use strict';
 
-// Version: 2024-01-15-v5 - Fixed positioning and debugging
 
 // Simple UUID generator
 function generateUUID() {
@@ -12,11 +11,25 @@ function generateUUID() {
 
 // Helper function to find image placeholder position robustly
 function findImagePlaceholderPosition(lineText, imageIndex, fallbackLineElement = null) {
+  // ---- Primary strategy: use canonical placeholder scan -------------------
+  const canonicalRanges = getAllPlaceholderRanges(lineText);
+  if (imageIndex >= 0 && imageIndex < canonicalRanges.length) {
+    const r = canonicalRanges[imageIndex];
+    return {
+      colStart: r.colStart,
+      patternLength: r.patternLength,
+      pattern: lineText.substr(r.colStart, r.patternLength),
+    };
+  }
+
+  // Fallback heuristics (legacy) -------------------------------------------
   // Try different placeholder patterns that might exist
   const placeholderPatterns = [
-    '\u200B\u200B\u200B', // 3 zero-width spaces (current)
-    '\u200B\u200B',       // 2 zero-width spaces (possible)
-    '\u200B'              // 1 zero-width space (legacy or collapsed)
+    '\u200B\u200B\u200B', // 3 × ZWSP (current)
+    '\u200B\u00A0\u200B', // ZWSP NBSP ZWSP (toolbar-inserted, incl. tables)
+    '\u200B\u200B',        // 2 × ZWSP (collapsed)
+    '\u00A0',              // single NBSP (edge / collapsed)
+    '\u200B'               // single ZWSP (legacy)
   ];
   
   for (const pattern of placeholderPatterns) {
@@ -779,52 +792,36 @@ exports.postAceInit = function (hook, context) {
             // The visual updates will be handled by acePostWriteDomLineHTML after attributes are applied
             console.log('[ep_image_insert mouseup] Skipping direct style application to avoid content collection triggers');
 
-            let targetRange = null;
-            if (resizePositionData) {
-                const lineNum = resizePositionData.lineNumber;
-                const colStart = resizePositionData.colStart;
-                const patternLength = resizePositionData.patternLength;
-                
-                // For attributes, we target the middle character of the placeholder pattern
-                const rangeStart = [lineNum, colStart + Math.floor(patternLength / 2)];
-                const rangeEnd = [lineNum, colStart + Math.floor(patternLength / 2) + 1];
-                targetRange = [rangeStart, rangeEnd];
-                
-                console.log(`[ep_image_insert mouseup] Using range [${rangeStart}] to [${rangeEnd}] for pattern length ${patternLength}`);
-            } else {
-                console.error('[ep_image_insert mouseup] Missing resize position data.');
-            }
+            _aceContext.callWithAce((ace) => {
+                const outerSpanAlive = (targetOuterSpan && document.contains(targetOuterSpan)) ? targetOuterSpan : null;
+                let workingOuterSpan = outerSpanAlive;
 
-            if (targetRange) {
-                 _aceContext.callWithAce((ace) => {
-                     try {
-                         // Use helper function to validate ace operation
-                         if (!validateAceOperation(ace, 'applyAttributes', targetRange[0], targetRange[1], 'mouseup resize')) {
-                             return;
-                         }
-                         
-                         // Apply attributes with additional error handling
-                         ace.ace_performDocumentApplyAttributesToRange(targetRange[0], targetRange[1], [
-                             ['image-width', widthToApply],
-                             ['image-height', heightToApplyPx],
-                             ['imageCssAspectRatio', newCssAspectRatioForVar]
-                         ]);
-                         
-                         console.log('[ep_image_insert mouseup] Successfully applied resize attributes');
-                         
-                     } catch (error) {
-                         console.error('[ep_image_insert mouseup] Error applying attributes:', error);
-                         console.error('[ep_image_insert mouseup] Target range was:', targetRange);
-                         console.error('[ep_image_insert mouseup] Attributes were:', [
-                             ['image-width', widthToApply],
-                             ['image-height', heightToApplyPx],
-                             ['imageCssAspectRatio', newCssAspectRatioForVar]
-                         ]);
-                     }
-                 }, 'applyImageAttributes', true);
-            } else {
-                 console.error('[ep_image_insert mouseup] Cannot apply attribute: Target range not found.');
-            }
+                // Fallback: locate by active image id if our stored element vanished
+                if (!workingOuterSpan && window.epImageInsertActiveImageId) {
+                    workingOuterSpan = $inner.find(`.inline-image.image-placeholder[data-image-id="${window.epImageInsertActiveImageId}"]`)[0];
+                }
+
+                const placeholderRange = getPlaceholderRangeFromOuterSpan(workingOuterSpan, ace, {wholePlaceholder: true});
+                if (!placeholderRange) {
+                    console.error('[ep_image_insert mouseup] Could not determine placeholder range for resize.');
+                    return;
+                }
+
+                if (!validateAceOperation(ace, 'applyAttributes', placeholderRange[0], placeholderRange[1], 'mouseup resize')) {
+                    return;
+                }
+
+                try {
+                    ace.ace_performDocumentApplyAttributesToRange(placeholderRange[0], placeholderRange[1], [
+                        ['image-width', widthToApply],
+                        ['image-height', heightToApplyPx],
+                        ['imageCssAspectRatio', newCssAspectRatioForVar]
+                    ]);
+                    console.log('[ep_image_insert mouseup] Successfully applied resize attributes (new targeting)');
+                } catch (err) {
+                    console.error('[ep_image_insert mouseup] Error applying resize attributes:', err);
+                }
+            }, 'applyImageAttributes', true);
 
             // Reset dragging state and clean up
             isDragging = false;
@@ -882,30 +879,109 @@ exports.postAceInit = function (hook, context) {
                 }
                 if (isValid) {
                     evt.preventDefault();
-                    const reader = new FileReader();
-                    reader.onload = (e_reader) => {
-                        const data = e_reader.target.result;
-                        const img = new Image();
-                        img.onload = () => {
-                            const widthPx = `${img.naturalWidth}px`;
-                            const heightPx = `${img.naturalHeight}px`;
-                            _aceContext.callWithAce((ace) => {
-                                ace.ace_doInsertImage(data, widthPx, heightPx);
-                            }, 'pasteImage', true);
-                        };
-                        img.onerror = () => {
-                            console.error('[ep_image_insert paste] Failed to load pasted image data. Inserting without dimensions.');
-                            _aceContext.callWithAce((ace) => {
-                                ace.ace_doInsertImage(data);
-                            }, 'pasteImageError', true);
-                        };
-                        img.src = data;
+
+                    // Determine storage strategy (default base64)
+                    const storageType = (clientVars && clientVars.ep_image_insert && clientVars.ep_image_insert.storageType) || 'base64';
+
+                    // Global cache to avoid re-uploading the same blob within a pad session
+                    window.epImageInsertUploadCache = window.epImageInsertUploadCache || {};
+
+                    // Helper to actually insert an <img> (via ace_doInsertImage)
+                    const insertIntoPad = (src, widthPx = null, heightPx = null) => {
+                        _aceContext.callWithAce((ace) => {
+                            ace.ace_doInsertImage(src, widthPx, heightPx);
+                        }, 'pasteImage', true);
                     };
-                    reader.onerror = (e_reader) => {
-                         console.error('[ep_image_insert paste] FileReader error:', e_reader);
-                         $.gritter.add({ title: errorTitle, text: 'Error reading pasted image file.', sticky: true, class_name: 'error' });
+
+                    // Fallback helper: convert blob to base64 and insert
+                    const insertAsDataUrl = (blob) => {
+                        const readerB64 = new FileReader();
+                        readerB64.onload = (e_reader) => {
+                            const dataUrl = e_reader.target.result;
+                            const probeImg = new Image();
+                            probeImg.onload = () => insertIntoPad(dataUrl, `${probeImg.naturalWidth}px`, `${probeImg.naturalHeight}px`);
+                            probeImg.onerror = () => insertIntoPad(dataUrl);
+                            probeImg.src = dataUrl;
+                        };
+                        readerB64.onerror = (e_reader) => {
+                            console.error('[ep_image_insert paste] FileReader error:', e_reader);
+                            $.gritter.add({ title: errorTitle, text: 'Error reading pasted image file.', sticky: true, class_name: 'error' });
+                        };
+                        readerB64.readAsDataURL(blob);
                     };
-                    reader.readAsDataURL(file);
+
+                    if (storageType === 'base64') {
+                        // Original behaviour retained
+                        insertAsDataUrl(file);
+                    } else if (storageType === 's3_presigned') {
+                        // Upload directly to S3 (or reuse if already uploaded)
+                        (async () => {
+                            try {
+                                // Compute SHA-256 hash for deduplication
+                                const arrayBuf = await file.arrayBuffer();
+                                const hashBuf = await crypto.subtle.digest('SHA-256', arrayBuf);
+                                const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+                                if (window.epImageInsertUploadCache[hashHex]) {
+                                    const cachedUrl = window.epImageInsertUploadCache[hashHex];
+                                    const probeImg = new Image();
+                                    probeImg.onload = () => insertIntoPad(cachedUrl, `${probeImg.naturalWidth}px`, `${probeImg.naturalHeight}px`);
+                                    probeImg.onerror = () => insertIntoPad(cachedUrl);
+                                    probeImg.src = cachedUrl;
+                                    return;
+                                }
+
+                                const queryParams = $.param({ name: file.name || `${hashHex}.png`, type: file.type });
+                                const presignData = await $.getJSON(`${clientVars.padId}/pluginfw/ep_image_insert/s3_presign?${queryParams}`);
+                                if (!presignData || !presignData.signedUrl || !presignData.publicUrl) {
+                                    throw new Error('Invalid presign response');
+                                }
+
+                                const uploadResp = await fetch(presignData.signedUrl, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': file.type },
+                                    body: file,
+                                });
+                                if (!uploadResp.ok) throw new Error(`S3 upload failed with status ${uploadResp.status}`);
+
+                                const publicUrl = presignData.publicUrl;
+                                window.epImageInsertUploadCache[hashHex] = publicUrl;
+
+                                const probeImg = new Image();
+                                probeImg.onload = () => insertIntoPad(publicUrl, `${probeImg.naturalWidth}px`, `${probeImg.naturalHeight}px`);
+                                probeImg.onerror = () => insertIntoPad(publicUrl);
+                                probeImg.src = publicUrl;
+                            } catch (err) {
+                                console.error('[ep_image_insert paste] S3 upload failed, falling back to base64:', err);
+                                insertAsDataUrl(file);
+                            }
+                        })();
+                    } else {
+                        // Generic server upload (local disk etc.)
+                        (async () => {
+                            try {
+                                const formData = new FormData();
+                                formData.append('file', file, file.name);
+                                const uploadUrl = await $.ajax({
+                                    type: 'POST',
+                                    url: `${clientVars.padId}/pluginfw/ep_image_insert/upload`,
+                                    data: formData,
+                                    cache: false,
+                                    contentType: false,
+                                    processData: false,
+                                    timeout: 60000,
+                                });
+
+                                const probeImg = new Image();
+                                probeImg.onload = () => insertIntoPad(uploadUrl, `${probeImg.naturalWidth}px`, `${probeImg.naturalHeight}px`);
+                                probeImg.onerror = () => insertIntoPad(uploadUrl);
+                                probeImg.src = uploadUrl;
+                            } catch (err) {
+                                console.error('[ep_image_insert paste] Server upload failed, falling back to base64:', err);
+                                insertAsDataUrl(file);
+                            }
+                        })();
+                    }
                 }
                 break; 
             }
@@ -1125,13 +1201,12 @@ exports.postAceInit = function (hook, context) {
                             
                             const lineText = rep.lines.atIndex(targetLineNumber).text;
                             
-                            // Use helper function to find placeholder position
-                            const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex, lineElement);
+                            // Use consolidated helper to build placeholder range
+                            const placeholderRange = getPlaceholderRangeFromOuterSpan(outerSpan, ace, {wholePlaceholder: true});
 
-                            if (placeholderInfo) {
-                                // Calculate the range to delete: the entire placeholder pattern
-                                const rangeStart = [targetLineNumber, placeholderInfo.colStart];
-                                const rangeEnd = [targetLineNumber, placeholderInfo.colStart + placeholderInfo.patternLength];
+                            if (placeholderRange) {
+                                const rangeStart = placeholderRange[0];
+                                const rangeEnd   = placeholderRange[1];
                                 
                                 try {
                                     // Use helper function to validate ace operation
@@ -1232,13 +1307,12 @@ exports.postAceInit = function (hook, context) {
                             
                             const lineText = rep.lines.atIndex(targetLineNumber).text;
                             
-                            // Use helper function to find placeholder position
-                            const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex, lineElement);
+                            // Use consolidated helper to build placeholder range
+                            const placeholderRange = getPlaceholderRangeFromOuterSpan(outerSpan, ace, {wholePlaceholder: true});
 
-                            if (placeholderInfo) {
-                                // For attributes, we target the middle character of the placeholder pattern
-                                const rangeStart = [targetLineNumber, placeholderInfo.colStart + Math.floor(placeholderInfo.patternLength / 2)];
-                                const rangeEnd = [targetLineNumber, placeholderInfo.colStart + Math.floor(placeholderInfo.patternLength / 2) + 1];
+                            if (placeholderRange) {
+                                const rangeStart = placeholderRange[0];
+                                const rangeEnd   = placeholderRange[1];
                                 
                                 try {
                                     // Use helper function to validate ace operation
@@ -1278,59 +1352,26 @@ exports.postAceInit = function (hook, context) {
                 // Use the specific selected image element (like float and resize logic does)
                 if (currentElement) {
                     const outerSpan = currentElement;
-                    
-                    // Find the position and delete the image using the same method as other operations
-                    const lineElement = $(outerSpan).closest('.ace-line')[0];
-                    if (lineElement) {
-                        const allImagePlaceholdersInLine = Array.from(lineElement.querySelectorAll('.inline-image.image-placeholder'));
-                        const imageIndex = allImagePlaceholdersInLine.indexOf(outerSpan);
-                        
-                        if (imageIndex !== -1) {
-                            const targetLineNumber = _getLineNumberOfElement(lineElement);
-                            
-                            _aceContext.callWithAce((ace) => {
-                                const rep = ace.ace_getRep();
-                                if (!rep.lines.atIndex(targetLineNumber)) {
-                                    console.error(`[ep_image_insert delete] Line ${targetLineNumber} does not exist in rep.`);
-                                    return;
-                                }
-                                
-                                const lineText = rep.lines.atIndex(targetLineNumber).text;
-                                
-                                // Use helper function to find placeholder position
-                                const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex, lineElement);
-
-                                if (placeholderInfo) {
-                                    // Calculate the range to delete: the entire placeholder pattern
-                                    const rangeStart = [targetLineNumber, placeholderInfo.colStart];
-                                    const rangeEnd = [targetLineNumber, placeholderInfo.colStart + placeholderInfo.patternLength];
-                                    
-                                    try {
-                                        // Use helper function to validate ace operation
-                                        if (!validateAceOperation(ace, 'replaceRange', rangeStart, rangeEnd, 'delete')) {
-                                            return;
-                                        }
-                                        
-                                        // Delete the image by replacing the text range with empty string
-                                        ace.ace_replaceRange(rangeStart, rangeEnd, '');
-                                        
-                                        console.log('Successfully deleted image at line', targetLineNumber, 'column', placeholderInfo.colStart);
-                                        
-                                    } catch (error) {
-                                        console.error('[ep_image_insert delete] Error deleting image:', error);
-                                        console.error('[ep_image_insert delete] Range was:', [rangeStart, rangeEnd]);
-                                    }
-                                } else {
-                                    console.error('[ep_image_insert delete] Could not find placeholder sequence in line text');
-                                }
-                            }, 'deleteImage', true);
-                            
-                            // Clear selection state since image will be deleted
-                            if (window.epImageInsertActiveImageId && $(outerSpan).attr('data-image-id') === window.epImageInsertActiveImageId) {
-                                window.epImageInsertActiveImageId = null;
-                            }
+                    _aceContext.callWithAce((ace) => {
+                        const placeholderRange = getPlaceholderRangeFromOuterSpan(outerSpan, ace, {wholePlaceholder: true});
+                        if (!placeholderRange) {
+                            console.error('[ep_image_insert delete] Could not locate placeholder range for deletion.');
+                            return;
                         }
-                    }
+
+                        const [rangeStart, rangeEnd] = placeholderRange;
+
+                        if (!validateAceOperation(ace, 'replaceRange', rangeStart, rangeEnd, 'delete')) {
+                            return;
+                        }
+
+                        try {
+                            ace.ace_replaceRange(rangeStart, rangeEnd, '');
+                            console.log('[ep_image_insert delete] Successfully deleted image via helper');
+                        } catch (err) {
+                            console.error('[ep_image_insert delete] Error deleting image:', err);
+                        }
+                    }, 'deleteImage', true);
                 }
                 
                 hideFormatMenu();
@@ -1397,6 +1438,14 @@ exports.acePostWriteDomLineHTML = (hookName, context) => {
     const outerSpan = placeholder;
     const innerSpan = outerSpan.querySelector('span.image-inner');
     if (!innerSpan) return;
+
+    // Ensure both outer and inner spans are non-editable so cursor keys cannot land inside
+    if (!innerSpan.hasAttribute('contenteditable')) {
+      innerSpan.setAttribute('contenteditable', 'false');
+    }
+    if (!outerSpan.hasAttribute('contenteditable')) {
+      outerSpan.setAttribute('contenteditable', 'false');
+    }
 
     let escapedSrc = null;
     let imageWidth = null;
@@ -1569,11 +1618,54 @@ exports.collectContentPost = function(name, context) {
 };
 
 exports.aceKeyEvent = (hookName, context, cb) => {
-  // const { evt, editorInfo } = context; // Unused
-  // const rep = editorInfo.ace_getRep(); // Unused
-  // const lineNumber = rep.selStart[0]; // Unused
-  // const currentColumn = rep.selStart[1]; // Unused
-  // const key = evt.key; // Unused
+  const { evt, editorInfo } = context;
+  if (evt.type !== 'keydown') return cb(false);
+  const key = evt.key;
+
+  // Only special-casing Backspace, Delete, printable characters
+  if (!['Backspace', 'Delete'].includes(key) && key.length !== 1) return cb(false);
+
+  const ace = editorInfo;
+  const rep = ace.ace_getRep();
+  if (!rep || !rep.selStart || !rep.selEnd) return cb(false);
+
+  // Only handle collapsed selections on a single line
+  if (rep.selStart[0] !== rep.selEnd[0] || rep.selStart[1] !== rep.selEnd[1]) return cb(false);
+  const lineNumber = rep.selStart[0];
+  let col = rep.selStart[1];
+
+  const lineObj = rep.lines.atIndex(lineNumber);
+  if (!lineObj) return cb(false);
+  const lineText = lineObj.text;
+
+  const placeholders = getAllPlaceholderRanges(lineText);
+  if (placeholders.length === 0) return cb(false);
+
+  const hit = placeholders.find(r => col >= r.colStart && col <= r.colStart + r.patternLength);
+  const afterHit = placeholders.find(r => col === r.colStart + r.patternLength);
+  const beforeHit = placeholders.find(r => col === r.colStart);
+
+  // Case 1: cursor inside placeholder – move it to end of placeholder to keep typing out
+  if (hit && (col > hit.colStart && col < hit.colStart + hit.patternLength)) {
+    ace.ace_performSelectionChange([lineNumber, hit.colStart + hit.patternLength], [lineNumber, hit.colStart + hit.patternLength], false);
+    evt.preventDefault();
+    return cb(true);
+  }
+
+  // Case 2: Backspace immediately after placeholder – delete whole placeholder
+  if (key === 'Backspace' && afterHit) {
+    ace.ace_replaceRange([lineNumber, afterHit.colStart], [lineNumber, afterHit.colStart + afterHit.patternLength], '');
+    evt.preventDefault();
+    return cb(true);
+  }
+
+  // Case 3: Delete immediately before placeholder – delete whole placeholder
+  if (key === 'Delete' && beforeHit) {
+    ace.ace_replaceRange([lineNumber, beforeHit.colStart], [lineNumber, beforeHit.colStart + beforeHit.patternLength], '');
+    evt.preventDefault();
+    return cb(true);
+  }
+
   return cb(false);
 };
 
@@ -1626,4 +1718,131 @@ const doInsertImage = function (src, widthPx, heightPx) {
   // This ensures that if user inserts multiple images in sequence, they don't overlap
   const newCursorPos = [cursorPos[0], cursorPos[1] + insertText.length];
   editorInfo.ace_performSelectionChange(newCursorPos, newCursorPos, false);
+};
+
+// NEW helper: build a fresh document range for an image placeholder using the DOM element.
+// Returns null if it cannot determine the range.
+function getPlaceholderRangeFromOuterSpan(outerSpan, ace, opts = {wholePlaceholder: true}) {
+  try {
+    if (!outerSpan) return null;
+    const lineElement = $(outerSpan).closest('.ace-line')[0];
+    if (!lineElement) return null;
+
+    const imagePlaceholders = Array.from(lineElement.querySelectorAll('.inline-image.image-placeholder'));
+    const imageIndex = imagePlaceholders.indexOf(outerSpan);
+    if (imageIndex === -1) return null;
+
+    const lineNumber = _getLineNumberOfElement(lineElement);
+    const rep = ace.ace_getRep();
+    if (!rep.lines.atIndex(lineNumber)) return null;
+
+    const lineText = rep.lines.atIndex(lineNumber).text;
+    const placeholderInfo = findImagePlaceholderPosition(lineText, imageIndex, lineElement);
+    if (!placeholderInfo) return null;
+
+    if (opts.wholePlaceholder) {
+      return [
+        [lineNumber, placeholderInfo.colStart],
+        [lineNumber, placeholderInfo.colStart + placeholderInfo.patternLength]
+      ];
+    }
+    // middle-character fallback
+    const mid = placeholderInfo.colStart + Math.floor(placeholderInfo.patternLength / 2);
+    return [[lineNumber, mid], [lineNumber, mid + 1]];
+  } catch (e) {
+    console.error('[ep_image_insert] getPlaceholderRangeFromOuterSpan error:', e);
+    return null;
+  }
+}
+
+// Helper: return all placeholder ranges (startCol,length) within a line
+function getAllPlaceholderRanges(lineText) {
+  const placeholderPatterns = [
+    '\u200B\u200B\u200B',      // 3 × ZWSP
+    '\u200B\u00A0\u200B',     // ZWSP NBSP ZWSP
+    '\u200B\u200B',            // 2 × ZWSP
+    '\u00A0',                   // single NBSP
+    '\u200B'                    // single ZWSP
+  ].map(p => p.replace(/\\u200B/g, '\u200B').replace(/\\u00A0/g, '\u00A0')); // real chars
+
+  const ranges = [];
+  let idx = 0;
+  while (idx < lineText.length) {
+    let matched = false;
+    for (const pattern of placeholderPatterns) {
+      if (lineText.startsWith(pattern, idx)) {
+        ranges.push({colStart: idx, patternLength: pattern.length});
+        idx += pattern.length;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) idx += 1;
+  }
+  return ranges;
+}
+
+/* ------------------------------------------------------------------
+ * Image rendering support for the read-only time-slider view
+ * ------------------------------------------------------------------ */
+
+/**
+ * Apply inline styles to the image placeholder `outerSpan` so that the image
+ * becomes visible in read-only contexts (timeslider or export preview).
+ */
+function _applyImageStylesForElement(outerSpan) {
+  if (!outerSpan) return;
+  const innerSpan = outerSpan.querySelector('span.image-inner');
+  if (!innerSpan) return;
+
+  // Recover attribute values from the CSS-classes that ACE placed on the span.
+  let escSrc = null, width = null, aspect = null, floatVal = null;
+  for (const cls of outerSpan.className.split(' ')) {
+    if (cls.startsWith('image:')) escSrc = cls.slice(6);
+    if (cls.startsWith('image-width:')) width = cls.slice(12);
+    if (cls.startsWith('imageCssAspectRatio:')) aspect = cls.slice(20);
+    if (cls.startsWith('image-float:')) floatVal = cls.slice(12);
+  }
+
+  // Set CSS custom properties / inline styles exactly like acePostWriteDomLineHTML.
+  if (escSrc) {
+    try {
+      const decoded = decodeURIComponent(escSrc);
+      innerSpan.style.setProperty('--image-src', `url("${decoded}")`);
+    } catch (_) { /* ignore */ }
+  }
+  if (width) innerSpan.style.width = width;
+  if (aspect) innerSpan.style.setProperty('--image-css-aspect-ratio', aspect);
+
+  // Float behaviour (left / right / inline)
+  outerSpan.classList.remove('image-float-left', 'image-float-right', 'image-float-none');
+  switch (floatVal) {
+    case 'left': outerSpan.classList.add('image-float-left'); break;
+    case 'right': outerSpan.classList.add('image-float-right'); break;
+    default: outerSpan.classList.add('image-float-none');
+  }
+}
+
+/**
+ * Client-side hook that runs in the time-slider once the UI is ready.
+ * It ensures all image placeholders are hydrated with the correct styles and
+ * repeats that every time the slider jumps to a different revision.
+ */
+exports.postTimesliderInit = () => {
+  // Helper that (re)applies styles to every image currently in the DOM.
+  const renderAllImages = () => {
+    const $placeholders = $('#innerdocbody').find('span.inline-image.image-placeholder');
+    $placeholders.each((_idx, el) => _applyImageStylesForElement(el));
+  };
+
+  // Initial render for the first revision shown.
+  renderAllImages();
+
+  // Re-render after every slider movement (revision change).
+  if (window.BroadcastSlider && typeof window.BroadcastSlider.onSlider === 'function') {
+    window.BroadcastSlider.onSlider(() => {
+      // Allow the DOM update from broadcast.js to finish first.
+      setTimeout(renderAllImages, 0);
+    });
+  }
 };

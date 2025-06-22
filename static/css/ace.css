@@ -1,4 +1,3 @@
-
 /* Import Bootstrap Icons if not already available */
 @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css');
 
@@ -303,3 +302,45 @@ span.inline-image.image-placeholder.image-float-right + span.inline-image.image-
 }
 
 /* === END Float containment fix === */
+
+/* === Modal loader styling === */
+#imageUploadModalLoader.popup,
+#imageUploadModalError.popup {
+  /* Position horizontally centered near the top of the viewport */
+  top: 20px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important; /* only horizontal centering */
+  right: auto !important;
+  margin: 0 !important;
+  position: fixed !important;
+  z-index: 10000;
+  /* Add a subtle border around the whole modal */
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+}
+
+/* Ensure both modals share the same inner-box styling */
+#imageUploadModalLoader .popup-content,
+#imageUploadModalError .popup-content {
+  border: none; /* border applied on outer container */
+}
+
+/* Style the inner content box */
+#imageUploadModalLoader .popup-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 32px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+}
+
+/* Provide user-visible feedback */
+#imageUploadModalLoader .loadingAnimation::before {
+  content: "Uploading image...";
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #202124;
+}
