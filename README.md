@@ -4,6 +4,7 @@
 `ep_images_extended` builds on `ep_image_insert` and other image upload plugins.  
 The main difference is that images are built as custom span structures using the CSS background image attribute. This bypasses the Content Collector which always requires images to be block-level styles (so they couldn't share the line with text). As a result, we can now type around images, which allows the creation of more interactive pad content. The plugin includes some other features like click + drag resize, image float, and cut/copy/delete through a context menu. It was designed for compatibility with my forthcoming tables plugin. It's a pretty heavyweight plugin (some would say overengineered), because I was prioritizing meeting functional requirements for my project. Etherpad wizards might have tips for optimization, it would surely be appreciated.
 
+![Demo](https://i.imgur.com/uTpL9Za.png)
 ---
 
 ## Installation
@@ -30,10 +31,13 @@ Create (or merge) an **`ep_images_extended`** block at the root of `settings.jso
 
 1. **Embedded Base-64** (default – zero config)
    ```jsonc
-   "ep_images_extended": {
-     "fileTypes": ["jpeg", "jpg", "png", "gif", "bmp", "webp"],
-     "maxFileSize": 5000000
-   }
+      "ep_images_extended": {
+        "storage": {               
+          "type": "base64" 
+        },
+        "fileTypes": ["jpeg", "jpg", "png", "gif", "bmp", "webp"],
+        "maxFileSize": 5000000
+      }
    ```
    Images are converted to data-URIs and live inside the pad. This has a pretty big performance impact.
 
@@ -58,22 +62,6 @@ Create (or merge) an **`ep_images_extended`** block at the root of `settings.jso
    * `AWS_SECRET_ACCESS_KEY`
    * `AWS_SESSION_TOKEN` (if using temporary credentials)
    
-
----
-
-## Option reference – quick lookup
-
-```text
-fileTypes      ↠   Allowed extensions (array of strings)
-maxFileSize    ↠   Maximum upload size in bytes
-storage.type   ↠   "base64"  |  "s3_presigned"
-   ├─ bucket    ↠   S3 bucket name  (s3_presigned only)
-   ├─ region    ↠   AWS region      (s3_presigned only)
-   ├─ publicURL ↠   CDN / CloudFront base URL (optional)
-   └─ expires   ↠   URL lifetime in seconds (optional)
-```
-All other values are ignored.
-
 ---
 
 ## Contributing

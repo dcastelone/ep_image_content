@@ -23,7 +23,6 @@
         "expressConfigure": "ep_images_extended/index",
         "eejsBlock_editbarMenuLeft": "ep_images_extended/editbar",
         "loadSettings": "ep_images_extended/settings",
-        "padRemove": "ep_images_extended/index",
         "collectContentPre": "ep_images_extended/static/js/contentCollection",
         "eejsBlock_styles": "ep_images_extended/index",
         "eejsBlock_timesliderStyles": "ep_images_extended/index",
