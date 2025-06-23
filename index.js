@@ -8,7 +8,6 @@ const url = require('url');
 const fs = require('fs');
 const fsp = fs.promises;
 const { JSDOM } = require('jsdom');
-const log4js = require('log4js');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
@@ -23,7 +22,8 @@ try {
   console.warn('[ep_images_extended] AWS SDK not installed; s3_presigned storage will not work.');
 }
 
-const logger = log4js.getLogger('ep_images_extended');
+// Removed log4js; use built-in console for logging
+const logger = console;
 
 // Simple in-memory IP rate limiter
 const _presignRateStore = new Map();
