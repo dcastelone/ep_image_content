@@ -2,6 +2,10 @@
   "parts": [
     {
       "name": "main",
+      "pre": [
+        "ep_font_color/main",
+        "ep_hyperlinked_text/main"
+      ],
       "client_hooks": {
         "postToolbarInit": "ep_images_extended/static/js/toolbar",
         "aceAttribsToClasses" : "ep_images_extended/static/js/clientHooks",
