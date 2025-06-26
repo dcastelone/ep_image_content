@@ -4,7 +4,7 @@
 `ep_images_extended` builds on `ep_image_insert` and other image upload plugins.  
 The main difference is that images are built as custom span structures using the CSS background image attribute. This bypasses the Content Collector which always requires images to be block-level styles (so they couldn't share the line with text). As a result, we can now type around images, which allows the creation of more interactive pad content. The plugin includes some other features like click + drag resize, image float, and cut/copy/delete through a context menu. It was designed for compatibility with my forthcoming tables plugin. It's a pretty heavyweight plugin (some would say overengineered), because I was prioritizing meeting functional requirements for my project. Etherpad wizards might have tips for optimization, it would surely be appreciated.
 
-![Demo](https://i.imgur.com/JdyA50U.png)
+![Demo](https://i.imgur.com/qGOBRep.png)
 
 ## Installation
 

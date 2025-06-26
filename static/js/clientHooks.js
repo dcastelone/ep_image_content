@@ -1,6 +1,18 @@
 'use strict';
 // Modified from ep_image_insert 1.0.7 
 
+// Optional helper (shared with ep_docx_html_customizer) that provides a CORS fetch with
+// automatic same-origin proxy fallback.  If the plugin is not present we simply fall back
+// to the native fetch logic.
+let fetchWithCorsProxy;
+try {
+  ({fetchWithCorsProxy} = require('../../../ep_docx_html_customizer/transform_common'));
+} catch (_) { /* helper not available – fallback to plain fetch */ }
+
+if (!fetchWithCorsProxy && typeof window !== 'undefined') {
+  fetchWithCorsProxy = window.fetchWithCorsProxy;
+}
+
 // Simple UUID generator
 function generateUUID() {
   return 'xxxx-xxxx-4xxx-yxxx-xxxx'.replace(/[xy]/g, function(c) {
@@ -1146,9 +1158,19 @@ exports.postAceInit = function (hook, context) {
                 // For HTTP URLs, fetch and convert to PNG
                 else if (imageSrc.startsWith('http')) {
                     // First try to fetch the image
-                    const response = await fetch(imageSrc, { mode: 'cors' });
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
+                    let response;
+                    try {
+                        if (typeof fetchWithCorsProxy === 'function') {
+                            response = await fetchWithCorsProxy(imageSrc);
+                        } else {
+                            response = await fetch(imageSrc, {mode: 'cors'});
+                            if (!response.ok) throw new Error(`status ${response.status}`);
+                        }
+                    } catch (fetchErr) {
+                        // Remote fetch failed – fall back to copying the URL as plain text
+                        await navigator.clipboard.writeText(imageSrc);
+                        showCopyFeedback(shouldCut ? 'Image URL cut to clipboard (fallback)' : 'Image URL copied to clipboard (fallback)');
+                        return; // Abort PNG-blob path
                     }
                     
                     // Convert the fetched image to a data URL, then to PNG

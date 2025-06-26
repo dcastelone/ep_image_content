@@ -22,8 +22,14 @@ try {
   console.warn('[ep_images_extended] AWS SDK not installed; s3_presigned storage will not work.');
 }
 
-// Removed log4js; use built-in console for logging
-const logger = console;
+// Replaced log4js with lightweight console wrapper to avoid external dependency
+// while preserving same API surface used below.
+const logger = {
+  debug: console.debug.bind(console),
+  info: console.info.bind(console),
+  warn: console.warn.bind(console),
+  error: console.error.bind(console),
+};
 
 // Simple in-memory IP rate limiter
 const _presignRateStore = new Map();
