@@ -1,7 +1,9 @@
 'use strict';
 // Modified from ep_image_insert 1.0.7 
 const eejs = require('ep_etherpad-lite/node/eejs/');
-const settings = require('ep_etherpad-lite/node/utils/Settings');
+// Compat: Etherpad 2.4 uses ESM for Settings. Support both CJS and ESM.
+const settingsModule = require('ep_etherpad-lite/node/utils/Settings');
+const settings = settingsModule.default || settingsModule;
 const { randomUUID } = require('crypto');
 const path = require('path');
 const url = require('url');
@@ -184,6 +186,9 @@ exports.expressConfigure = (hookName, context) => {
 
   // ADD LOCAL DISK STORAGE UPLOAD ENDPOINT ------------------------------
   // Register the route only if storage.type === 'local'
+  logger.info('[ep_images_extended] storageType at startup:',
+    settings.ep_images_extended?.storage?.type);
+    
   if (settings.ep_images_extended && settings.ep_images_extended.storage && settings.ep_images_extended.storage.type === 'local') {
     // Route: POST /p/:padId/pluginfw/ep_images_extended/upload
     // Accepts multipart/form-data with field "file" and saves it to the
